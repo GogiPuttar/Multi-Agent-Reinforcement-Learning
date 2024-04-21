@@ -1,0 +1,5 @@
+<map id="turtlelib::DiffDrive" name="turtlelib::DiffDrive">
+<area shape="rect" id="node1" title="models the kinematics of a differential drive robot with a given wheel track and wheel radius" alt="" coords="103,95,242,121"/>
+<area shape="rect" id="node2" href="$structturtlelib_1_1wheelAngles.html" title="represent a mobile robot&#39;s pose" alt="" coords="5,5,169,32"/>
+<area shape="rect" id="node3" href="$structturtlelib_1_1Pose2D.html" title="represent a mobile robot&#39;s pose" alt="" coords="194,5,325,32"/>
+</map>

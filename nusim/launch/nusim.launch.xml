@@ -1,0 +1,37 @@
+<launch>
+
+  <!-- Argument to specify configuration file for rviz. -->
+  <arg name="rviz_config" default="$(find-pkg-share nusim)/config/nusim.rviz" 
+   description=".rviz file to configure the simulator"/>
+
+  <!-- Argument to specify configuration file for robot. -->
+  <arg name="use_rviz" default="true" 
+   description="Specify if rviz needs to start - true, false"/>
+
+  <!-- Declare the RViz node -->
+  <!-- Load the config file -->
+  <node name="rviz2" pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" if="$(eval '\'$(var use_rviz)\' == \'true\'')"/>
+
+  <!-- Launch the Python launch file -->
+  <include file="$(find-pkg-share nuturtle_description)/launch/load_one.launch.py">
+    <!-- Pass required arguments to the Python launch file -->
+    <arg name="color" value="red" />
+    <arg name="use_rviz" value="false" />
+    <arg name="use_jsp" value="jsp" />
+  </include>
+
+  <!-- Argument to specify configuration file for simulator. -->
+  <arg name="world_config" default="basic_world.yaml" 
+   description=".yaml file to configure the world"/>
+
+  <!-- Argument to specify configuration file for robot. -->
+  <arg name="diff_config" default="diff_params.yaml" 
+   description=".yaml file to configure the robot"/>
+
+  <!-- Main simulation node -->
+  <node pkg="nusim" exec="nusim" name="nusim">
+    <param from="$(find-pkg-share nusim)/config/$(var world_config)"/>
+    <param from="$(find-pkg-share nuturtle_description)/config/$(var diff_config)"/>
+  </node>
+
+</launch>

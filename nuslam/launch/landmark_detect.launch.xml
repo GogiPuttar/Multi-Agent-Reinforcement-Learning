@@ -1,0 +1,37 @@
+<launch>
+
+    <!-- Argument to specify configuration file for simulator. -->
+    <arg name="world_config" default="basic_world.yaml" 
+     description=".yaml file to configure the simulator"/>
+    <arg name="robot" default="nusim"
+     description="Where to launch the nodes - robot, nusim, nothing"/>
+    <arg name="use_laser" default="true"
+     description="Use output of circle fitting on laserscan for SLAM - true | false"/>
+    <arg name="use_rviz" default="true"
+     description="Whether or not to use landamrks rviz - true | false"/>
+
+    <!-- Landmark detection node -->
+    <node pkg="nuslam" exec="landmarks" 
+    if="$(eval '\'$(var robot)\' == \'localhost\'')">
+        <param from="$(find-pkg-share nusim)/config/$(var world_config)"/>
+        <param name="real_lidar" value="true"/>
+    </node>
+
+    <node pkg="nuslam" exec="landmarks" 
+    if="$(eval '\'$(var robot)\' == \'nusim\'')">
+        <param name="real_lidar" value="false"/>
+    </node>
+
+    <!-- Declare the RViz node and load the config file-->
+    <node name="rviz2" pkg="rviz2" exec="rviz2"
+    args="-d $(find-pkg-share nuslam)/config/landmarkssim.rviz" if="$(eval '\'$(var use_rviz)\' == \'true\'')"/>
+  
+    <!-- Launch the SLAM simulation launch file -->
+    <include file="$(find-pkg-share nuslam)/launch/slam.launch.xml">
+        <arg name="cmd_src" value="circle"/>
+        <arg name="robot" value="$(var robot)"/>
+        <arg name="use_laser" value="$(var use_laser)"/>
+        <arg name="use_rviz" value="false"/>
+    </include>
+  
+  </launch>

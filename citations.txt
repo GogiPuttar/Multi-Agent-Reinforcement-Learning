@@ -1,0 +1,17 @@
+# Citations
+
+## Collaborators
+- Abhishek Sankar
+- Srikanth Schelbert
+- Shail Dalal
+- Ananya Agarwal
+
+## External References
+- Marno's repository: https://github.com/Marnonel6/EKF_SLAM_from_scratch
+- ChatGPT Transcripts for:
+    - SVG: https://chat.openai.com/share/98aea199-64d2-497b-acc7-c4eb0615ce84
+    - Vector Normalization: https://chat.openai.com/share/a60709d3-73a2-4eea-8e58-33918814af88 
+
+- Others: 
+    - https://en.cppreference.com/book/intro/classes
+    - 

@@ -1,0 +1,21 @@
+<launch>
+
+    <arg name="robot" default="nusim"
+    description="Where to launch the nodes - robot, nusim, nothing"/>
+
+    <!-- Argument to specify configuration file for robot control. -->
+    <arg name="config_file" default="diff_params.yaml" 
+    description=".yaml file to configure robot controls"/>
+
+    <!-- Odometry node -->
+    <node pkg="nuturtle_control" exec="odometry" name="odometry"  
+    if="$(eval '\'$(var robot)\' != \'none\'')">
+        <param name="body_id" value="blue/base_footprint"/>
+        <param name="wheel_left" value="blue/wheel_left_link"/>
+        <param name="wheel_right" value="blue/wheel_right_link"/>
+        <param from="$(find-pkg-share nuturtle_description)/config/$(var config_file)"/>
+        <remap from="/joint_states" to="blue/joint_states"/>
+        <!-- Remap jsp to get wheels to rotate -->
+    </node>
+
+</launch>

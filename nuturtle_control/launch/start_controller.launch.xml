@@ -1,0 +1,20 @@
+<launch>
+
+    <arg name="robot" default="nusim"
+    description="Where to launch the nodes - robot, nusim, nothing"/>
+
+    <!-- Argument to specify configuration file for robot control. -->
+    <arg name="config_file" default="diff_params.yaml" 
+    description=".yaml file to configure robot controls"/>
+
+    <!-- Turtle control node if using nusim-->
+    <node pkg="nuturtle_control" exec="turtle_control" name="turtle_control"
+    if="$(eval '\'$(var robot)\' == \'nusim\'')">
+        <param from="$(find-pkg-share nuturtle_description)/config/$(var config_file)"/>
+        <remap from="/wheel_cmd" to="red/wheel_cmd"/>
+        <remap from="/sensor_data" to="red/sensor_data"/>
+        <remap from="/joint_states" to="blue/joint_states"/>
+        <!-- Remap jsp to get wheels to rotate -->
+    </node>
+
+</launch>

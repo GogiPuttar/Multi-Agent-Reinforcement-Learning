@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    wheel_radius: 0.033
+    track_width : 0.16
+    motor_cmd_max : 265.0
+    motor_cmd_per_rad_sec : 0.024
+    encoder_ticks_per_rad : 651.898
+    # encoder_ticks_per_rad : 99651.898
+    collision_radius : 0.11
+    # collision_radius : 0.08 # better visuals for collision
+    input_noise: 50.0
+    slip_fraction: 0.5
+    basic_sensor_variance: 0.000004 # meter square. for minimal sensor noise
+    # basic_sensor_variance: 0.004 # meter square. for large sensor noise
+    # max_range: 3.5
+    max_range: 1.0
+    lidar_variance: 0.0001 # meter square
+    # lidar_variance: 0.0000 # meter square
+    lidar_min_range: 0.12
+    lidar_max_range: 2.0
+    lidar_angle_increment: 1.0 # degrees
+    lidar_num_samples: 360.0
+    # lidar_resolution: 0.015 # meters
+    lidar_resolution: 0.005 # meters
+

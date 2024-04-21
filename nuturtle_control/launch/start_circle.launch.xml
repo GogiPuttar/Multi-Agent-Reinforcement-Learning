@@ -1,0 +1,14 @@
+<launch>
+
+    <arg name="cmd_src" default="circle"
+    description="What motion to command - circle, teleop, or none"/>
+
+    <!-- Argument to specify configuration file for robot control. -->
+    <arg name="config_file" default="diff_params.yaml" 
+    description=".yaml file to configure robot controls"/>
+
+    <!-- Circle node -->
+    <node pkg="nuturtle_control" exec="circle" name="circle"
+    if="$(eval '\'$(var cmd_src)\' == \'circle\'')"/>
+
+</launch>
