@@ -10,10 +10,6 @@
     # collision_radius : 0.08 # better visuals for collision
     input_noise: 50.0
     slip_fraction: 0.5
-    basic_sensor_variance: 0.000004 # meter square. for minimal sensor noise
-    # basic_sensor_variance: 0.004 # meter square. for large sensor noise
-    # max_range: 3.5
-    max_range: 1.0
     lidar_variance: 0.0001 # meter square
     # lidar_variance: 0.0000 # meter square
     lidar_min_range: 0.12
