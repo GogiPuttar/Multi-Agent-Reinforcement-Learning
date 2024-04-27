@@ -78,23 +78,28 @@ install(EXPORT turtlelib-targets
         NAMESPACE turtlelib::
         DESTINATION lib/cmake/${PROJECT_NAME})
 
-find_package(Doxygen)
 
-# Building documentation should be optional.
-# To build documentation pass -DBUILD_DOCS=ON when generating the build system
-option(BUILD_DOCS "Build the documentation" ON)
+### IGNORES DOXYGEN WARNINGS ###
 
-# build just because Doxygen is missing
-if(${DOXYGEN_FOUND} AND ${BUILD_DOCS})
-    # Turn the README.md into the homepage of the doxygen docs
-    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
+# find_package(Doxygen)
 
-    # Tell Doxygen where to find the documentation
-    doxygen_add_docs(doxygen include/ src/ README.md ALL)
+# # Building documentation should be optional.
+# # To build documentation pass -DBUILD_DOCS=ON when generating the build system
+# option(BUILD_DOCS "Build the documentation" ON)
 
-    # The documentation will be in the build/html directory
-    # The main page is build/html/index.html
-endif()
+# # build just because Doxygen is missing
+# if(${DOXYGEN_FOUND} AND ${BUILD_DOCS})
+#     # Turn the README.md into the homepage of the doxygen docs
+#     set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
+
+#     # Tell Doxygen where to find the documentation
+#     doxygen_add_docs(doxygen include/ src/ README.md ALL)
+
+#     # The documentation will be in the build/html directory
+#     # The main page is build/html/index.html
+# endif()
+
+###############################
 
 include(CTest)
 

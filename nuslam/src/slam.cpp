@@ -418,7 +418,7 @@ private:
     arma::colvec map_vector = estimator_ptr_->map();
     visualization_msgs::msg::MarkerArray obstacles_;
 
-    for (int landmark = 0; landmark < estimator_ptr_->num_seen_landmarks(); landmark++) {
+    for (int landmark = 0; landmark < static_cast<int>(estimator_ptr_->num_seen_landmarks()); landmark++) {
       // if (map_vector(landmark) != 0) {
         visualization_msgs::msg::Marker obstacle_;
         obstacle_.header.frame_id = "map";
