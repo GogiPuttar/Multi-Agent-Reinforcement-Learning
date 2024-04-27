@@ -32,7 +32,7 @@ def generate_launch_description():
                 name="color",
                 default_value="purple",
                 description="Color of nuturtle's body",
-                choices=["red", "green", "blue", "purple", ""],
+                choices=["red", "green", "blue", "purple", "cyan", "magenta", "yellow", ""],
             ),
             SetLaunchConfiguration(
                 name="rviz_color",

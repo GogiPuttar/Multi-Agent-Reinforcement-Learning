@@ -8,6 +8,14 @@
   <arg name="use_rviz" default="true" 
    description="Specify if rviz needs to start - true, false"/>
 
+  <!-- Argument to seed the randomness of environment generation. -->
+  <arg name="seed" default="0.5" 
+   description="Seed value for randomness"/>
+
+  <!-- Argument to set number of robots -->
+  <arg name="num_robots" default="3" 
+   description="Number of robots"/>
+
   <!-- Declare the RViz node -->
   <!-- Load the config file -->
   <node name="rviz2" pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" if="$(eval '\'$(var use_rviz)\' == \'true\'')"/>
@@ -15,9 +23,15 @@
   <!-- Launch the Python launch file -->
   <include file="$(find-pkg-share nuturtle_description)/launch/load_one.launch.py">
     <!-- Pass required arguments to the Python launch file -->
-    <arg name="color" value="red" />
+    <arg name="color" value="cyan" />
     <arg name="use_rviz" value="false" />
     <arg name="use_jsp" value="jsp" />
+  </include>
+
+  <!-- Launch the Python launch file -->
+  <include file="$(find-pkg-share multisim)/launch/load_many.launch.py">
+    <!-- Pass required arguments to the Python launch file -->
+    <arg name="iterations" value="$(var num_robots)" />
   </include>
 
   <!-- Argument to specify configuration file for simulator. -->
@@ -32,6 +46,8 @@
   <node pkg="multisim" exec="multisim" name="multisim">
     <param from="$(find-pkg-share multisim)/config/$(var world_config)"/>
     <param from="$(find-pkg-share nuturtle_description)/config/$(var diff_config)"/>
+    <param name="num_robots" value="$(var num_robots)"/>
+    <param name="seed" value="$(var seed)"/>
   </node>
 
 </launch>

@@ -113,6 +113,8 @@ public:
   : Node("multisim"), timestep_(0)
   {
     // Parameter description
+    auto seed_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto num_robots_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto rate_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto x0_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto y0_des = rcl_interfaces::msg::ParameterDescriptor{};
@@ -136,6 +138,8 @@ public:
     auto lidar_num_samples_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto lidar_resolution_des = rcl_interfaces::msg::ParameterDescriptor{};
 
+    seed_des.description = "random seed value to configure the environment from 0-1";
+    num_robots_des.description = "number of agents";
     rate_des.description = "Timer callback frequency [Hz]";
     x0_des.description = "Initial x coordinate of the robot [m]";
     y0_des.description = "Initial y coordinate of the robot [m]";
@@ -160,6 +164,8 @@ public:
     lidar_resolution_des.description = "Distance resolution in LIDAR scanning [m]";
 
     // Declare default parameters values
+    declare_parameter("seed", -1.0, seed_des);     // 0-1
+    declare_parameter("num_robots", 0, num_robots_des);     // 1,2,3,..
     declare_parameter("rate", 200, rate_des);     // Hz for timer_callback
     declare_parameter("x0", 0.0, x0_des);         // Meters
     declare_parameter("y0", 0.0, y0_des);         // Meters
@@ -184,6 +190,8 @@ public:
     declare_parameter("lidar_resolution", -1.0, lidar_resolution_des); // Meters
     
     // Get params - Read params from yaml file that is passed in the launch file
+    seed_ = get_parameter("seed").get_parameter_value().get<double>();
+    num_robots_ = get_parameter("num_robots").get_parameter_value().get<int>();
     rate = get_parameter("rate").get_parameter_value().get<int>();
     x0_ = get_parameter("x0").get_parameter_value().get<double>();
     y0_ = get_parameter("y0").get_parameter_value().get<double>();
@@ -273,6 +281,8 @@ public:
 
 private:
   // Variables related to environment
+  double seed_;
+  int num_robots_;
   size_t timestep_;
   int rate;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -823,6 +833,8 @@ private:
     {
       fake_lidar_publisher_->publish(lidar_data_);
     }
+
+      RCLCPP_INFO(this->get_logger(), "Seed: %f, Num robots: %d", seed_, num_robots_);
   }
 
   /// \brief Ensures all values are passed via .yaml file, and they're reasonable
@@ -843,12 +855,11 @@ private:
           lidar_resolution_ == -1.0
           )
     {
-      RCLCPP_DEBUG(this->get_logger(), "Param rate: %d", rate);
-      RCLCPP_DEBUG(this->get_logger(), "Param wheel_radius: %f", wheel_radius_);
-      RCLCPP_DEBUG(this->get_logger(), "Param track_width: %f", track_width_);
-      RCLCPP_DEBUG(this->get_logger(), "Param encoder_ticks_per_rad: %f", encoder_ticks_per_rad_);
-      RCLCPP_DEBUG(this->get_logger(), "Param motor_cmd_per_rad_sec: %f", motor_cmd_per_rad_sec_);
-      RCLCPP_DEBUG(this->get_logger(), "Param input_noise: %f", input_noise_);
+      RCLCPP_ERROR(this->get_logger(), "Param wheel_radius: %f", wheel_radius_);
+      RCLCPP_ERROR(this->get_logger(), "Param track_width: %f", track_width_);
+      RCLCPP_ERROR(this->get_logger(), "Param encoder_ticks_per_rad: %f", encoder_ticks_per_rad_);
+      RCLCPP_ERROR(this->get_logger(), "Param motor_cmd_per_rad_sec: %f", motor_cmd_per_rad_sec_);
+      RCLCPP_ERROR(this->get_logger(), "Param input_noise: %f", input_noise_);
       RCLCPP_DEBUG(this->get_logger(), "Param slip_fraction: %f", slip_fraction_);
       RCLCPP_DEBUG(this->get_logger(), "Param collision_radius: %f", collision_radius_);
       RCLCPP_DEBUG(this->get_logger(), "Param lidar_variance: %f", lidar_variance_);
@@ -875,7 +886,6 @@ private:
           lidar_resolution_ < 0.0
           )
     {
-      RCLCPP_DEBUG(this->get_logger(), "Param rate: %d", rate);
       RCLCPP_DEBUG(this->get_logger(), "Param wheel_radius: %f", wheel_radius_);
       RCLCPP_DEBUG(this->get_logger(), "Param track_width: %f", track_width_);
       RCLCPP_DEBUG(this->get_logger(), "Param encoder_ticks_per_rad: %f", encoder_ticks_per_rad_);
@@ -891,6 +901,16 @@ private:
       RCLCPP_DEBUG(this->get_logger(), "Param lidar_resolution: %f", lidar_resolution_);
       
       throw std::runtime_error("Incorrect params in diff_params.yaml!");
+    }
+
+    if (seed_ == -1.0)
+    {
+      throw std::runtime_error("Missing seed value!");
+    }
+    else if (seed_ < 0.0 || seed_ > 1.0)
+    {
+      RCLCPP_ERROR(this->get_logger(), "Seed: %f", seed_);
+      throw std::runtime_error("Improper seed value!");
     }
   }
 
