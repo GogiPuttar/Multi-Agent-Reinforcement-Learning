@@ -313,6 +313,7 @@ private:
   double wall_height_ = 0.25;   // Height of walls [m]
   visualization_msgs::msg::MarkerArray arena_walls_;
   visualization_msgs::msg::MarkerArray walls_;
+  std::vector<std::pair<int, int>> empty_spaces_;
 
   // Variables related to diff drive
   double wheel_radius_ = -1.0;
@@ -463,20 +464,16 @@ private:
       // Temporarily add wall to MarkerArray
       walls_.markers.push_back(wall_);
 
-      if (!check_connectedness())
+      if (!check_connectedness(i))
       {
         walls_.markers.pop_back();
         --i;
       } 
-
-      // RCLCPP_ERROR(this->get_logger(), "i: %ld", i);
     }
   }
 
-  bool check_connectedness()
+  bool check_connectedness(const size_t wall_index)
   {
-    // return true;
-
     // Create a temporary room grid to represent the state of the room
     std::vector<std::vector<int>> room_grid(static_cast<int>(arena_x_ * 2.0 / min_corridor_width_) - 1, std::vector<int>(static_cast<int>(arena_y_ * 2.0 / min_corridor_width_) - 1, 0));
 
@@ -580,15 +577,30 @@ private:
       {
         if (room_grid[i][j] == 0)
         {
-          RCLCPP_ERROR(this->get_logger(), "BFS works %d %d", i, j);
-
           return false; // The wall disconnects the room
-
         }
       }
     }
 
-    // Otherwise
+    // Check if last wall has been added
+    if (wall_index == static_cast<size_t>(wall_num_ - 1))
+    {
+      // Populate empty spaces
+      for(int i = 0; i < static_cast<int>(room_grid.size()); i++)
+      {
+        for (int j = 0; j < static_cast<int>(room_grid[0].size()); j++)
+        {
+          if (room_grid[i][j] == 2)
+          {
+            empty_spaces_.push_back({i,j});
+          }
+        }
+      }
+      printVector2D(room_grid);
+      RCLCPP_ERROR(this->get_logger(), "Empty spaces known: %ld", empty_spaces_.size());
+    }
+
+    // Finally
     return true; 
   }
 
@@ -605,7 +617,6 @@ private:
           RCLCPP_ERROR(rclcpp::get_logger("print_vector"), "%s", rowString.c_str());
       }
   }
-
 
   /// \brief Create walls as a MarkerArray and publish them to a topic to display them in Rviz
   void create_arena_walls()
