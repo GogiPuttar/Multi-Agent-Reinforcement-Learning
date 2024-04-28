@@ -116,14 +116,14 @@ public:
     auto seed_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto num_robots_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto rate_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto x0_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto y0_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto theta0_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto obstacles_x_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto obstacles_y_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto obstacles_r_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto arena_x_des = rcl_interfaces::msg::ParameterDescriptor{};
-    auto arena_y_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto arena_x_min_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto arena_x_max_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto arena_y_min_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto arena_y_max_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto min_corridor_width_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto wall_breadth_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto wall_length_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto wall_num_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto wheel_radius_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto track_width_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto encoder_ticks_per_rad_des = rcl_interfaces::msg::ParameterDescriptor{};
@@ -138,17 +138,17 @@ public:
     auto lidar_num_samples_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto lidar_resolution_des = rcl_interfaces::msg::ParameterDescriptor{};
 
-    seed_des.description = "random seed value to configure the environment from 0-1";
+    seed_des.description = "random seed value to configure the environment. Integer from [1, max_seed]";
     num_robots_des.description = "number of agents";
     rate_des.description = "Timer callback frequency [Hz]";
-    x0_des.description = "Initial x coordinate of the robot [m]";
-    y0_des.description = "Initial y coordinate of the robot [m]";
-    theta0_des.description = "Initial theta angle of the robot [radians]";
-    obstacles_x_des.description = "Vector of x coordinates for each obstacle [m]";
-    obstacles_y_des.description = "Vector of y coordinates for each obstacle [m]";
-    obstacles_r_des.description = "Radius of cylindrical obstacles [m]";
-    arena_x_des.description = "Length of arena along x [m]";
-    arena_y_des.description = "Length of arena along y [m]";
+    arena_x_min_des.description = "Minimum length of arena along x [m]";
+    arena_x_max_des.description = "Maxmimum length of arena along x [m]";
+    arena_y_min_des.description = "Minimum length of arena along y [m]";
+    arena_y_max_des.description = "Maximum length of arena along y [m]";
+    min_corridor_width_des.description = "Minimum width of any corrdior [m]";
+    wall_breadth_des.description = "Breadth of a wall [m]";
+    wall_length_des.description = "Length of a wall [m]";
+    wall_num_des.description = "Number of walls";
     wheel_radius_des.description = "Radius of the wheels [m]";
     track_width_des.description = "Separation between the wheels [m]";
     encoder_ticks_per_rad_des.description = "The number of encoder 'ticks' per radian [ticks/rad]";
@@ -164,17 +164,17 @@ public:
     lidar_resolution_des.description = "Distance resolution in LIDAR scanning [m]";
 
     // Declare default parameters values
-    declare_parameter("seed", -1.0, seed_des);     // 0-1
+    declare_parameter("seed", 0, seed_des);     // 1,2,3 ... max_seed_
     declare_parameter("num_robots", 0, num_robots_des);     // 1,2,3,..
     declare_parameter("rate", 200, rate_des);     // Hz for timer_callback
-    declare_parameter("x0", 0.0, x0_des);         // Meters
-    declare_parameter("y0", 0.0, y0_des);         // Meters
-    declare_parameter("theta0", 0.0, theta0_des); // Radians
-    declare_parameter("obstacles.x", std::vector<double>{}, obstacles_x_des); // Meters
-    declare_parameter("obstacles.y", std::vector<double>{}, obstacles_y_des); // Meters
-    declare_parameter("obstacles.r", 0.0, obstacles_r_des); // Meters
-    declare_parameter("arena_x_length", 0.0, arena_x_des);  // Meters
-    declare_parameter("arena_y_length", 0.0, arena_y_des);  // Meters
+    declare_parameter("arena_x_min", 0.0, arena_x_min_des);  // Meters
+    declare_parameter("arena_x_max", 0.0, arena_x_max_des);  // Meters
+    declare_parameter("arena_y_min", 0.0, arena_y_min_des);  // Meters
+    declare_parameter("arena_y_max", 0.0, arena_y_max_des);  // Meters
+    declare_parameter("min_corridor_width", 0.0, min_corridor_width_des);  // Meters
+    declare_parameter("wall_breadth", 0.0, wall_breadth_des);  // Meters
+    declare_parameter("wall_length", 0.0, wall_length_des);  // Meters
+    declare_parameter("wall_num", 0, wall_num_des); 
     declare_parameter("wheel_radius", -1.0, wheel_radius_des); // Meters
     declare_parameter("track_width", -1.0, track_width_des);  // Meters
     declare_parameter("encoder_ticks_per_rad", -1.0, encoder_ticks_per_rad_des); // Ticks per radian
@@ -190,17 +190,18 @@ public:
     declare_parameter("lidar_resolution", -1.0, lidar_resolution_des); // Meters
     
     // Get params - Read params from yaml file that is passed in the launch file
-    seed_ = get_parameter("seed").get_parameter_value().get<double>();
+    seed_ = get_parameter("seed").get_parameter_value().get<int>();
     num_robots_ = get_parameter("num_robots").get_parameter_value().get<int>();
     rate = get_parameter("rate").get_parameter_value().get<int>();
-    x0_ = get_parameter("x0").get_parameter_value().get<double>();
-    y0_ = get_parameter("y0").get_parameter_value().get<double>();
-    theta0_ = get_parameter("theta0").get_parameter_value().get<double>();
-    obstacles_x_ = get_parameter("obstacles.x").get_parameter_value().get<std::vector<double>>();
-    obstacles_y_ = get_parameter("obstacles.y").get_parameter_value().get<std::vector<double>>();
-    obstacles_r_ = get_parameter("obstacles.r").get_parameter_value().get<double>();
-    arena_x_ = get_parameter("arena_x_length").get_parameter_value().get<double>();
-    arena_y_ = get_parameter("arena_y_length").get_parameter_value().get<double>();
+    arena_x_min_ = get_parameter("arena_x_min").get_parameter_value().get<double>();
+    arena_x_max_ = get_parameter("arena_x_max").get_parameter_value().get<double>();
+    arena_y_min_ = get_parameter("arena_y_min").get_parameter_value().get<double>();
+    arena_y_max_ = get_parameter("arena_y_max").get_parameter_value().get<double>();
+    arena_y_max_ = get_parameter("arena_y_max").get_parameter_value().get<double>();
+    min_corridor_width_ = get_parameter("min_corridor_width").get_parameter_value().get<double>();
+    wall_breadth_ = get_parameter("wall_breadth").get_parameter_value().get<double>();
+    wall_length_ = get_parameter("wall_length").get_parameter_value().get<double>();
+    wall_num_ = get_parameter("wall_num").get_parameter_value().get<int>();
     wheel_radius_ = get_parameter("wheel_radius").get_parameter_value().get<double>();
     track_width_ = get_parameter("track_width").get_parameter_value().get<double>();
     encoder_ticks_per_rad_ =
@@ -222,7 +223,8 @@ public:
     check_yaml_params();
 
     // Initialize the differential drive kinematic state
-    turtle_ = turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0_, x0_, y0_}};
+    // turtle_ = turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0_, x0_, y0_}};
+    turtle_ = turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{0, 0, 0}};
 
     // Initialize the noise generators
     motor_control_noise_ = std::normal_distribution<>{0.0, std::sqrt(input_noise_)}; // Uncertainity in motor control
@@ -232,20 +234,26 @@ public:
     // Timer timestep [seconds]
     dt_ = 1.0 / static_cast<double>(rate);
 
-    // Create obstacles
-    create_obstacles_array();
+    // Initialize Pseduo Random environment
+    std::srand((unsigned) seed_);
+
+    arena_x_ = std::fmod(static_cast<double>(std::rand()), (arena_x_max_ - arena_x_min_)) + arena_x_min_;
+    arena_y_ = std::fmod(static_cast<double>(std::rand()), (arena_y_max_ - arena_y_min_)) + arena_y_min_;
 
     // Create arena
     create_arena_walls();
 
+    // Create obstacles
+    // create_walls();
+
     // Create ~/timestep publisher
     timestep_publisher_ = create_publisher<std_msgs::msg::UInt64>("~/timestep", 10);
     // Create ~/obstacles publisher
-    obstacles_publisher_ =
-      create_publisher<visualization_msgs::msg::MarkerArray>("~/obstacles", 10);
-    // Create ~/walls publisher
     walls_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>("~/walls", 10);
+    // Create ~/walls publisher
+    arena_walls_publisher_ =
+      create_publisher<visualization_msgs::msg::MarkerArray>("~/arena_walls", 10);
     // Create red/sensor_data publisher
     sensor_data_publisher_ = create_publisher<nuturtlebot_msgs::msg::SensorData>(
       "red/sensor_data", 10);
@@ -281,24 +289,27 @@ public:
 
 private:
   // Variables related to environment
-  double seed_;
+  unsigned int seed_;
+  unsigned int max_seed_ = 100;
   int num_robots_;
   size_t timestep_;
   int rate;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-  double x0_ = 0.0;          // Meters
-  double y0_ = 0.0;          // Meters
-  double theta0_ = 0;        // Radians
   double dt_ = 0.0; // Multisim Timer in seconds
-  double obstacles_r_ = 0.01;    // Size of obstacles [m]
-  double obstacles_h_ = 0.25;    // Height of obstacles [m]
+  
+  // Environment
+  double arena_x_;
+  double arena_x_min_ = 0.0;    // Minimum length of the arena along x [m]
+  double arena_x_max_ = 0.0;    // Maxmimum length of the arena along x [m]
+  double arena_y_;
+  double arena_y_min_ = 0.0;  // Minimum length of the arena along y [m]
+  double arena_y_max_ = 0.0;  // Maxmimum length of the arena along y [m]
+  double min_corridor_width_ = 0.0;  // Minimum length of any corridor [m]
+  double wall_breadth_ = 0.0;  // Breadth/thickness of walls [m]
+  double wall_length_ = 0.0;  // Length of walls [m]
+  int wall_num_ = 0;  // Number
   double wall_height_ = 0.25;   // Height of walls [m]
-  double wall_thickness_ = 0.156;  // Thickness of walls [m]
-  double arena_x_ = 0.0;    // Length of the arena along x [m]
-  double arena_y_ = 0.0;  // Length of the arena along y [m]
-  std::vector<double> obstacles_x_;    // Location of obstacles [m]
-  std::vector<double> obstacles_y_;
-  visualization_msgs::msg::MarkerArray obstacles_;
+  visualization_msgs::msg::MarkerArray arena_walls_;
   visualization_msgs::msg::MarkerArray walls_;
 
   // Variables related to diff drive
@@ -338,8 +349,8 @@ private:
   // Create objects
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<std_msgs::msg::UInt64>::SharedPtr timestep_publisher_;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obstacles_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr walls_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr arena_walls_publisher_;
   rclcpp::Publisher<nuturtlebot_msgs::msg::SensorData>::SharedPtr sensor_data_publisher_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_server_;
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
@@ -353,9 +364,9 @@ private:
     std_srvs::srv::Empty::Response::SharedPtr)
   {
     timestep_ = 0;
-    turtle_.q.x = x0_;
-    turtle_.q.y = y0_;
-    turtle_.q.theta = theta0_;
+    turtle_.q.x = 0.0;
+    turtle_.q.y = 0.0;
+    turtle_.q.theta = 0.0;
   }
 
   /// \brief Teleport the robot to a specified pose
@@ -395,109 +406,109 @@ private:
     }
   }
 
-  /// \brief Create obstacles as a MarkerArray and publish them to a topic to display them in Rviz
-  void create_obstacles_array()
-  {
-    if (obstacles_x_.size() != obstacles_y_.size()) {
-      throw std::runtime_error("x and y coordinate lists are not the same length!");
-    }
+  // /// \brief Create obstacles as a MarkerArray and publish them to a topic to display them in Rviz
+  // void create_obstacles_array()
+  // {
+  //   if (obstacles_x_.size() != obstacles_y_.size()) {
+  //     throw std::runtime_error("x and y coordinate lists are not the same length!");
+  //   }
 
-    for (size_t i = 0; i < obstacles_x_.size(); i++) {
-      visualization_msgs::msg::Marker obstacle_;
-      obstacle_.header.frame_id = "multisim/world";
-      obstacle_.header.stamp = get_clock()->now();
-      obstacle_.id = i;
-      obstacle_.type = visualization_msgs::msg::Marker::CYLINDER;
-      obstacle_.action = visualization_msgs::msg::Marker::ADD;
-      obstacle_.pose.position.x = obstacles_x_.at(i);
-      obstacle_.pose.position.y = obstacles_y_.at(i);
-      obstacle_.pose.position.z = obstacles_h_ / 2.0;
-      obstacle_.pose.orientation.x = 0.0;
-      obstacle_.pose.orientation.y = 0.0;
-      obstacle_.pose.orientation.z = 0.0;
-      obstacle_.pose.orientation.w = 1.0;
-      obstacle_.scale.x = obstacles_r_ * 2.0;   // Diameter in x
-      obstacle_.scale.y = obstacles_r_ * 2.0;   // Diameter in y
-      obstacle_.scale.z = obstacles_h_;         // Height
-      obstacle_.color.r = 1.0f;
-      obstacle_.color.g = 0.0f;
-      obstacle_.color.b = 0.0f;
-      obstacle_.color.a = 1.0;
-      obstacles_.markers.push_back(obstacle_);
-    }
-  }
+  //   for (size_t i = 0; i < obstacles_x_.size(); i++) {
+  //     visualization_msgs::msg::Marker obstacle_;
+  //     obstacle_.header.frame_id = "multisim/world";
+  //     obstacle_.header.stamp = get_clock()->now();
+  //     obstacle_.id = i;
+  //     obstacle_.type = visualization_msgs::msg::Marker::CYLINDER;
+  //     obstacle_.action = visualization_msgs::msg::Marker::ADD;
+  //     obstacle_.pose.position.x = obstacles_x_.at(i);
+  //     obstacle_.pose.position.y = obstacles_y_.at(i);
+  //     obstacle_.pose.position.z = obstacles_h_ / 2.0;
+  //     obstacle_.pose.orientation.x = 0.0;
+  //     obstacle_.pose.orientation.y = 0.0;
+  //     obstacle_.pose.orientation.z = 0.0;
+  //     obstacle_.pose.orientation.w = 1.0;
+  //     obstacle_.scale.x = obstacles_r_ * 2.0;   // Diameter in x
+  //     obstacle_.scale.y = obstacles_r_ * 2.0;   // Diameter in y
+  //     obstacle_.scale.z = obstacles_h_;         // Height
+  //     obstacle_.color.r = 1.0f;
+  //     obstacle_.color.g = 0.0f;
+  //     obstacle_.color.b = 0.0f;
+  //     obstacle_.color.a = 1.0;
+  //     obstacles_.markers.push_back(obstacle_);
+  //   }
+  // }
 
   /// \brief Create walls as a MarkerArray and publish them to a topic to display them in Rviz
   void create_arena_walls()
   {
     for (int i = 0; i <= 3; i++) {
-      visualization_msgs::msg::Marker wall_;
-      wall_.header.frame_id = "multisim/world";
-      wall_.header.stamp = get_clock()->now();
-      wall_.id = i;
-      wall_.type = visualization_msgs::msg::Marker::CUBE;
-      wall_.action = visualization_msgs::msg::Marker::ADD;
+      visualization_msgs::msg::Marker arena_wall_;
+      arena_wall_.header.frame_id = "multisim/world";
+      arena_wall_.header.stamp = get_clock()->now();
+      arena_wall_.id = i;
+      arena_wall_.type = visualization_msgs::msg::Marker::CUBE;
+      arena_wall_.action = visualization_msgs::msg::Marker::ADD;
 
       // Wall on positive x-axis
       if (i == 0) {
-        wall_.pose.position.x = (arena_x_ + wall_thickness_) / 2.0;
-        wall_.pose.position.y = 0.0;
+        arena_wall_.pose.position.x = (arena_x_ + wall_breadth_) / 2.0;
+        arena_wall_.pose.position.y = 0.0;
 
-        wall_.pose.orientation.x = 0.0;
-        wall_.pose.orientation.y = 0.0;
-        wall_.pose.orientation.z = 0.7071068;
-        wall_.pose.orientation.w = 0.7071068;
+        arena_wall_.pose.orientation.x = 0.0;
+        arena_wall_.pose.orientation.y = 0.0;
+        arena_wall_.pose.orientation.z = 0.7071068;
+        arena_wall_.pose.orientation.w = 0.7071068;
       }
       // Wall on positive y-axis
       else if (i == 1) {
-        wall_.pose.position.x = 0.0;
-        wall_.pose.position.y = (arena_y_ + wall_thickness_) / 2.0;
+        arena_wall_.pose.position.x = 0.0;
+        arena_wall_.pose.position.y = (arena_y_ + wall_breadth_) / 2.0;
 
-        wall_.pose.orientation.x = 0.0;
-        wall_.pose.orientation.y = 0.0;
-        wall_.pose.orientation.z = 0.0;
-        wall_.pose.orientation.w = 1.0;
+        arena_wall_.pose.orientation.x = 0.0;
+        arena_wall_.pose.orientation.y = 0.0;
+        arena_wall_.pose.orientation.z = 0.0;
+        arena_wall_.pose.orientation.w = 1.0;
       }
       // Wall on negative x-axis
       else if (i == 2) {
-        wall_.pose.position.x = -(arena_x_ + wall_thickness_) / 2.0;
-        wall_.pose.position.y = 0.0;
+        arena_wall_.pose.position.x = -(arena_x_ + wall_breadth_) / 2.0;
+        arena_wall_.pose.position.y = 0.0;
 
-        wall_.pose.orientation.x = 0.0;
-        wall_.pose.orientation.y = 0.0;
-        wall_.pose.orientation.z = 0.7071068;
-        wall_.pose.orientation.w = 0.7071068;
+        arena_wall_.pose.orientation.x = 0.0;
+        arena_wall_.pose.orientation.y = 0.0;
+        arena_wall_.pose.orientation.z = 0.7071068;
+        arena_wall_.pose.orientation.w = 0.7071068;
       }
       // Wall on negative y-axis
       else if (i == 3) {
-        wall_.pose.position.x = 0.0;
-        wall_.pose.position.y = -(arena_y_ + wall_thickness_) / 2.0;
+        arena_wall_.pose.position.x = 0.0;
+        arena_wall_.pose.position.y = -(arena_y_ + wall_breadth_) / 2.0;
 
-        wall_.pose.orientation.x = 0.0;
-        wall_.pose.orientation.y = 0.0;
-        wall_.pose.orientation.z = 0.0;
-        wall_.pose.orientation.w = 1.0;
+        arena_wall_.pose.orientation.x = 0.0;
+        arena_wall_.pose.orientation.y = 0.0;
+        arena_wall_.pose.orientation.z = 0.0;
+        arena_wall_.pose.orientation.w = 1.0;
       }
       // Z - Position
-      wall_.pose.position.z = wall_height_ / 2.0;
+      arena_wall_.pose.position.z = wall_height_ / 2.0;
 
       // Wall dimensions
       if (i == 0 || i == 2) {
-        wall_.scale.x = arena_y_ + 2 * wall_thickness_;
+        arena_wall_.scale.x = arena_y_ + 2 * wall_breadth_;
       } else {
-        wall_.scale.x = arena_x_ + 2 * wall_thickness_;
+        arena_wall_.scale.x = arena_x_ + 2 * wall_breadth_;
       }
-      wall_.scale.y = wall_thickness_;
-      wall_.scale.z = wall_height_;
+      arena_wall_.scale.y = wall_breadth_;
+      arena_wall_.scale.z = wall_height_;
 
       // Red Walls
-      wall_.color.r = 1.0f;
-      wall_.color.g = 0.0f;
-      wall_.color.b = 0.0f;
-      wall_.color.a = 1.0;
+      arena_wall_.color.r = 1.0f;
+      arena_wall_.color.g = 0.0f;
+      arena_wall_.color.b = 0.0f;
+      arena_wall_.color.a = 1.0;
 
       // Add wall to array
-      walls_.markers.push_back(wall_);
+      arena_walls_.markers.push_back(arena_wall_);
     }
   }
 
@@ -544,11 +555,11 @@ private:
     turtlelib::wheelAngles delta_wheels_{(static_cast<double>(noisy_wheel_cmd_.left_velocity) * (1 + left_slip_) * motor_cmd_per_rad_sec_) * dt_, (static_cast<double>(noisy_wheel_cmd_.right_velocity) * (1 + right_slip_) * motor_cmd_per_rad_sec_) * dt_};
 
     // Detect and perform required update to transform if colliding, otherwise update trasnform normally
-    if(!detect_and_simulate_collision(delta_wheels_))
-    {
-      // Update Transform if no collision
-      turtle_.driveWheels(delta_wheels_);
-    }
+    // if(!detect_and_simulate_collision(delta_wheels_))
+    // {
+    //   // Update Transform if no collision
+    //   turtle_.driveWheels(delta_wheels_);
+    // }
   }
 
   /// \brief Publish sensor data
@@ -579,237 +590,237 @@ private:
     red_path_.poses.push_back(red_path_pose_stamped_);
   }
 
-  /// \brief Indicate and handle collisions
-  bool detect_and_simulate_collision(turtlelib::wheelAngles predicted_delta_wheels_)
-  {    
-    // Predicted robot motion
-    turtlelib::DiffDrive predicted_turtle_ = turtle_;
-    predicted_turtle_.driveWheels(predicted_delta_wheels_);   
+  // /// \brief Indicate and handle collisions
+  // bool detect_and_simulate_collision(turtlelib::wheelAngles predicted_delta_wheels_)
+  // {    
+  //   // Predicted robot motion
+  //   turtlelib::DiffDrive predicted_turtle_ = turtle_;
+  //   predicted_turtle_.driveWheels(predicted_delta_wheels_);   
 
-    turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
-    turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
+  //   turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
+  //   turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
 
-    for (size_t i = 0; i < obstacles_x_.size(); i++)
-    {
-      // Find local coordinates of obstacle
-      turtlelib::Point2D obstacle_pos_world_{obstacles_x_.at(i), obstacles_y_.at(i)};
-      turtlelib::Point2D obstacle_pos_robot_ = T_robot_world_(obstacle_pos_world_);
+  //   for (size_t i = 0; i < obstacles_x_.size(); i++)
+  //   {
+  //     // Find local coordinates of obstacle
+  //     turtlelib::Point2D obstacle_pos_world_{obstacles_x_.at(i), obstacles_y_.at(i)};
+  //     turtlelib::Point2D obstacle_pos_robot_ = T_robot_world_(obstacle_pos_world_);
 
-      // Detect collision
-      if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
-      {
-        // If colliding, calculate shift of robot frame, in robot frame
-        turtlelib::Vector2D robotshift_robot_{
-        -((collision_radius_ + obstacles_r_) * cos(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.x),
-        -((collision_radius_ + obstacles_r_) * sin(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.y)
-        };
+  //     // Detect collision
+  //     if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
+  //     {
+  //       // If colliding, calculate shift of robot frame, in robot frame
+  //       turtlelib::Vector2D robotshift_robot_{
+  //       -((collision_radius_ + obstacles_r_) * cos(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.x),
+  //       -((collision_radius_ + obstacles_r_) * sin(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.y)
+  //       };
 
-        // Calculate transform corresponding to this shift
-        turtlelib::Transform2D T_robot_newrobot_{robotshift_robot_};
+  //       // Calculate transform corresponding to this shift
+  //       turtlelib::Transform2D T_robot_newrobot_{robotshift_robot_};
 
-        // Define this transformation in the world frame
-        turtlelib::Transform2D T_world_newrobot_ = T_world_robot_ * T_robot_newrobot_;
+  //       // Define this transformation in the world frame
+  //       turtlelib::Transform2D T_world_newrobot_ = T_world_robot_ * T_robot_newrobot_;
 
-        if(lie_group_collision_)
-        {
-          turtle_.q.x = T_world_newrobot_.translation().x;
-          turtle_.q.y = T_world_newrobot_.translation().y;
-          turtle_.q.theta = T_world_newrobot_.rotation();
-        }
+  //       if(lie_group_collision_)
+  //       {
+  //         turtle_.q.x = T_world_newrobot_.translation().x;
+  //         turtle_.q.y = T_world_newrobot_.translation().y;
+  //         turtle_.q.theta = T_world_newrobot_.rotation();
+  //       }
           
-        turtle_.phi.left = turtlelib::normalize_angle(turtle_.phi.left + predicted_delta_wheels_.left); // TODO: wheel rotation not working properly
-        turtle_.phi.right = turtlelib::normalize_angle(turtle_.phi.right + predicted_delta_wheels_.right);
+  //       turtle_.phi.left = turtlelib::normalize_angle(turtle_.phi.left + predicted_delta_wheels_.left); // TODO: wheel rotation not working properly
+  //       turtle_.phi.right = turtlelib::normalize_angle(turtle_.phi.right + predicted_delta_wheels_.right);
 
-        RCLCPP_DEBUG(this->get_logger(), "turtle: %f B: %f", obstacle_pos_robot_.x, obstacle_pos_robot_.y);
-        return true; // Colliding with one obstacle, therefore, ignore other obstacles
-      } 
-    }
-    return false; // Not colliding
+  //       RCLCPP_DEBUG(this->get_logger(), "turtle: %f B: %f", obstacle_pos_robot_.x, obstacle_pos_robot_.y);
+  //       return true; // Colliding with one obstacle, therefore, ignore other obstacles
+  //     } 
+  //   }
+  //   return false; // Not colliding
 
-    throw std::runtime_error("Invalid collision! Check collision simulation!");
-  }
+  //   throw std::runtime_error("Invalid collision! Check collision simulation!");
+  // }
 
-  /// \brief Fake lidar data
-  void lidar()
-  {
-    lidar_data_.header.frame_id = "red/base_scan";
-    lidar_data_.header.stamp = get_clock()->now();
-    lidar_data_.angle_min = 0.0;
-    lidar_data_.angle_max = turtlelib::deg2rad(360.0); // convert degrees to radians
-    lidar_data_.angle_increment = turtlelib::deg2rad(lidar_angle_increment_); // convert degrees to radians
-    lidar_data_.time_increment = 0.0005574136157520115;
-    lidar_data_.time_increment = 0.0;
-    lidar_data_.scan_time = 1.0 / lidar_frequency_;
-    lidar_data_.range_min = lidar_min_range_;
-    lidar_data_.range_max = lidar_max_range_;
-    lidar_data_.ranges.resize(lidar_num_samples_);
+  // /// \brief Fake lidar data
+  // void lidar()
+  // {
+  //   lidar_data_.header.frame_id = "red/base_scan";
+  //   lidar_data_.header.stamp = get_clock()->now();
+  //   lidar_data_.angle_min = 0.0;
+  //   lidar_data_.angle_max = turtlelib::deg2rad(360.0); // convert degrees to radians
+  //   lidar_data_.angle_increment = turtlelib::deg2rad(lidar_angle_increment_); // convert degrees to radians
+  //   lidar_data_.time_increment = 0.0005574136157520115;
+  //   lidar_data_.time_increment = 0.0;
+  //   lidar_data_.scan_time = 1.0 / lidar_frequency_;
+  //   lidar_data_.range_min = lidar_min_range_;
+  //   lidar_data_.range_max = lidar_max_range_;
+  //   lidar_data_.ranges.resize(lidar_num_samples_);
 
-    // Offset between LIDAR and Footprint (fixed, unless things go very ugly)
-    turtlelib::Pose2D lidar_pose_{turtle_.pose().theta, turtle_.pose().x - 0.032*cos(turtle_.pose().theta), turtle_.pose().y - 0.032*sin(turtle_.pose().theta)};
+  //   // Offset between LIDAR and Footprint (fixed, unless things go very ugly)
+  //   turtlelib::Pose2D lidar_pose_{turtle_.pose().theta, turtle_.pose().x - 0.032*cos(turtle_.pose().theta), turtle_.pose().y - 0.032*sin(turtle_.pose().theta)};
 
-    // Iterate over samples
-    for (int sample_index = 0; sample_index < lidar_num_samples_; sample_index++) 
-    {       
-      // Limit of laser in world frame
-      turtlelib::Point2D limit{
-                                lidar_pose_.x + lidar_max_range_ * cos(sample_index * lidar_data_.angle_increment + lidar_pose_.theta),
-                                lidar_pose_.y + lidar_max_range_ * sin(sample_index * lidar_data_.angle_increment + lidar_pose_.theta)
-                              };
+  //   // Iterate over samples
+  //   for (int sample_index = 0; sample_index < lidar_num_samples_; sample_index++) 
+  //   {       
+  //     // Limit of laser in world frame
+  //     turtlelib::Point2D limit{
+  //                               lidar_pose_.x + lidar_max_range_ * cos(sample_index * lidar_data_.angle_increment + lidar_pose_.theta),
+  //                               lidar_pose_.y + lidar_max_range_ * sin(sample_index * lidar_data_.angle_increment + lidar_pose_.theta)
+  //                             };
 
-      // Slope of laser trace in world frame
-      double slope = (limit.y - lidar_pose_.y) / (limit.x - lidar_pose_.x  + 1e-7);
+  //     // Slope of laser trace in world frame
+  //     double slope = (limit.y - lidar_pose_.y) / (limit.x - lidar_pose_.x  + 1e-7);
 
-      // Length of laser trace
-      double length = lidar_max_range_;
+  //     // Length of laser trace
+  //     double length = lidar_max_range_;
 
-      double lidar_reading = lidar_max_range_;
+  //     double lidar_reading = lidar_max_range_;
 
-      bool wall_measured = false; // Estimate distance to wall only once
+  //     bool wall_measured = false; // Estimate distance to wall only once
 
-      // Determine closest intersection between laser (line) and obstacles (circles), 
-      // determine closest obstacle outside of minimum distance, and
-      // snap intersection point according to laser resolution.
-      // Reference: [https://mathworld.wolfram.com/Circle-LineIntersection.html]
-      for (size_t i = 0; i < obstacles_x_.size(); i++) 
-      { 
-        // Determinant. D = x_1 * y_2 - x_2 * y_1, relative to the obstacle
-        double D = (lidar_pose_.x - obstacles_x_.at(i)) // x_1
-                    * (limit.y - obstacles_y_.at(i)) // y_2
-                    - (limit.x - obstacles_x_.at(i)) // x_2 
-                    * (lidar_pose_.y - obstacles_y_.at(i)); // y_1
+  //     // Determine closest intersection between laser (line) and obstacles (circles), 
+  //     // determine closest obstacle outside of minimum distance, and
+  //     // snap intersection point according to laser resolution.
+  //     // Reference: [https://mathworld.wolfram.com/Circle-LineIntersection.html]
+  //     for (size_t i = 0; i < obstacles_x_.size(); i++) 
+  //     { 
+  //       // Determinant. D = x_1 * y_2 - x_2 * y_1, relative to the obstacle
+  //       double D = (lidar_pose_.x - obstacles_x_.at(i)) // x_1
+  //                   * (limit.y - obstacles_y_.at(i)) // y_2
+  //                   - (limit.x - obstacles_x_.at(i)) // x_2 
+  //                   * (lidar_pose_.y - obstacles_y_.at(i)); // y_1
 
-        // Discriminant. delta = r^2 * (d_r)^2 - D^2
-        double delta = std::pow(obstacles_r_, 2) * std::pow(length, 2) - std::pow(D, 2); 
+  //       // Discriminant. delta = r^2 * (d_r)^2 - D^2
+  //       double delta = std::pow(obstacles_r_, 2) * std::pow(length, 2) - std::pow(D, 2); 
 
-        // delta < 0 => No intersection.
-        if (delta < 0.0)
-        {
-          // Estimate where laser hits the wall, if not already estimated
-          if(!wall_measured)
-          {
-            // North Wall reading
-            if(limit.y > arena_y_/2.0)
-            {
-              turtlelib::Vector2D laser_vector{ 0, arena_y_/2.0 - lidar_pose_.y};
-              laser_vector.x = laser_vector.y / (slope  + 1e-7);
+  //       // delta < 0 => No intersection.
+  //       if (delta < 0.0)
+  //       {
+  //         // Estimate where laser hits the wall, if not already estimated
+  //         if(!wall_measured)
+  //         {
+  //           // North Wall reading
+  //           if(limit.y > arena_y_/2.0)
+  //           {
+  //             turtlelib::Vector2D laser_vector{ 0, arena_y_/2.0 - lidar_pose_.y};
+  //             laser_vector.x = laser_vector.y / (slope  + 1e-7);
 
-              if(lidar_reading > turtlelib::magnitude(laser_vector))
-              {
-                lidar_reading = turtlelib::magnitude(laser_vector);
-              }
-            }
-            // West Wall reading
-            if(limit.x < -arena_x_/2.0)
-            {
-              turtlelib::Vector2D laser_vector{ -arena_x_/2.0 - lidar_pose_.x, 0};
-              laser_vector.y = laser_vector.x * slope;
+  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
+  //             {
+  //               lidar_reading = turtlelib::magnitude(laser_vector);
+  //             }
+  //           }
+  //           // West Wall reading
+  //           if(limit.x < -arena_x_/2.0)
+  //           {
+  //             turtlelib::Vector2D laser_vector{ -arena_x_/2.0 - lidar_pose_.x, 0};
+  //             laser_vector.y = laser_vector.x * slope;
 
-              if(lidar_reading > turtlelib::magnitude(laser_vector))
-              {
-                lidar_reading = turtlelib::magnitude(laser_vector);
-              }
-            }
-            // South Wall reading
-            if(limit.y < -arena_y_/2.0)
-            {
-              turtlelib::Vector2D laser_vector{ 0, -arena_y_/2.0 - lidar_pose_.y};
-              laser_vector.x = laser_vector.y / (slope  + 1e-7);
+  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
+  //             {
+  //               lidar_reading = turtlelib::magnitude(laser_vector);
+  //             }
+  //           }
+  //           // South Wall reading
+  //           if(limit.y < -arena_y_/2.0)
+  //           {
+  //             turtlelib::Vector2D laser_vector{ 0, -arena_y_/2.0 - lidar_pose_.y};
+  //             laser_vector.x = laser_vector.y / (slope  + 1e-7);
 
-              if(lidar_reading > turtlelib::magnitude(laser_vector))
-              {
-                lidar_reading = turtlelib::magnitude(laser_vector);
-              }
-            }
-            // East Wall reading
-            if(limit.x > arena_x_/2.0)
-            {
-              turtlelib::Vector2D laser_vector{ arena_x_/2.0 - lidar_pose_.x, 0};
-              laser_vector.y = laser_vector.x * slope;
+  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
+  //             {
+  //               lidar_reading = turtlelib::magnitude(laser_vector);
+  //             }
+  //           }
+  //           // East Wall reading
+  //           if(limit.x > arena_x_/2.0)
+  //           {
+  //             turtlelib::Vector2D laser_vector{ arena_x_/2.0 - lidar_pose_.x, 0};
+  //             laser_vector.y = laser_vector.x * slope;
 
-              if(lidar_reading > turtlelib::magnitude(laser_vector))
-              {
-                lidar_reading = turtlelib::magnitude(laser_vector);
-              }
-            }
-            wall_measured = true;
-          }
-        }
+  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
+  //             {
+  //               lidar_reading = turtlelib::magnitude(laser_vector);
+  //             }
+  //           }
+  //           wall_measured = true;
+  //         }
+  //       }
         
-        // delta = 0 => Tangent.
-        else if (delta == 0.0)
-        {
-          double d_x = limit.x - lidar_pose_.x;
-          double d_y = limit.y - lidar_pose_.y;
+  //       // delta = 0 => Tangent.
+  //       else if (delta == 0.0)
+  //       {
+  //         double d_x = limit.x - lidar_pose_.x;
+  //         double d_y = limit.y - lidar_pose_.y;
 
-          // One solution
+  //         // One solution
 
-          turtlelib::Vector2D laser_vector{ 
-                                            D * d_y /(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-                                            -D * d_x /(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-                                          };
+  //         turtlelib::Vector2D laser_vector{ 
+  //                                           D * d_y /(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
+  //                                           -D * d_x /(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
+  //                                         };
 
-          // This formula is for infinite lines however, our LIDAR is unidirectional.
-          if((laser_vector.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-          {
-            if(lidar_reading > turtlelib::magnitude(laser_vector))
-            {
-              lidar_reading = turtlelib::magnitude(laser_vector);
-            }
-          }
-        }
+  //         // This formula is for infinite lines however, our LIDAR is unidirectional.
+  //         if((laser_vector.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
+  //         {
+  //           if(lidar_reading > turtlelib::magnitude(laser_vector))
+  //           {
+  //             lidar_reading = turtlelib::magnitude(laser_vector);
+  //           }
+  //         }
+  //       }
 
-        // delta > 0 => Secant.
-        else if (delta > 0.0)
-        {
-          double d_x = limit.x - lidar_pose_.x;
-          double d_y = limit.y - lidar_pose_.y;
+  //       // delta > 0 => Secant.
+  //       else if (delta > 0.0)
+  //       {
+  //         double d_x = limit.x - lidar_pose_.x;
+  //         double d_y = limit.y - lidar_pose_.y;
 
-          // Two solutions
+  //         // Two solutions
 
-          // Solution 1
-          turtlelib::Vector2D laser_vector_1{ 
-                                            (D * d_y + (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-                                            (-D * d_x + std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-                                          };
+  //         // Solution 1
+  //         turtlelib::Vector2D laser_vector_1{ 
+  //                                           (D * d_y + (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
+  //                                           (-D * d_x + std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
+  //                                         };
 
-          // This formula is for infinite lines. However, our LIDAR is unidirectional.
-          if((laser_vector_1.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-          {
-            if(lidar_reading > turtlelib::magnitude(laser_vector_1))
-            {
-              lidar_reading = turtlelib::magnitude(laser_vector_1);
-            }
-          }
+  //         // This formula is for infinite lines. However, our LIDAR is unidirectional.
+  //         if((laser_vector_1.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
+  //         {
+  //           if(lidar_reading > turtlelib::magnitude(laser_vector_1))
+  //           {
+  //             lidar_reading = turtlelib::magnitude(laser_vector_1);
+  //           }
+  //         }
 
-          // Solution 2
-          turtlelib::Vector2D laser_vector_2{ 
-                                            (D * d_y - (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-                                            (-D * d_x - std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-                                          };
+  //         // Solution 2
+  //         turtlelib::Vector2D laser_vector_2{ 
+  //                                           (D * d_y - (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
+  //                                           (-D * d_x - std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
+  //                                         };
 
-          // This formula is for infinite lines. However, our LIDAR is unidirectional.
-          if((laser_vector_2.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-          {
-            if(lidar_reading > turtlelib::magnitude(laser_vector_2))
-            {
-              lidar_reading = turtlelib::magnitude(laser_vector_2);
-            }
-          }
-        }
-      }
+  //         // This formula is for infinite lines. However, our LIDAR is unidirectional.
+  //         if((laser_vector_2.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
+  //         {
+  //           if(lidar_reading > turtlelib::magnitude(laser_vector_2))
+  //           {
+  //             lidar_reading = turtlelib::magnitude(laser_vector_2);
+  //           }
+  //         }
+  //       }
+  //     }
 
-      // Check lidar ranges
-      if (lidar_reading >= lidar_max_range_ || lidar_reading < lidar_min_range_) 
-      { 
-        lidar_data_.ranges.at(sample_index) = 0.0;
-      } 
-      else 
-      {
-        // Snap to lidar resolution
-        lidar_data_.ranges.at(sample_index) = lidar_resolution_ * round((lidar_reading + lidar_noise_(get_random())) / lidar_resolution_) ;
-      }
-    }
-  }
+  //     // Check lidar ranges
+  //     if (lidar_reading >= lidar_max_range_ || lidar_reading < lidar_min_range_) 
+  //     { 
+  //       lidar_data_.ranges.at(sample_index) = 0.0;
+  //     } 
+  //     else 
+  //     {
+  //       // Snap to lidar resolution
+  //       lidar_data_.ranges.at(sample_index) = lidar_resolution_ * round((lidar_reading + lidar_noise_(get_random())) / lidar_resolution_) ;
+  //     }
+  //   }
+  // }
 
   /// \brief Main simulation time loop
   void timer_callback()
@@ -817,10 +828,10 @@ private:
     auto message = std_msgs::msg::UInt64();
     message.data = ++timestep_;
     timestep_publisher_->publish(message);
-    obstacles_publisher_->publish(obstacles_);
     walls_publisher_->publish(walls_);
+    arena_walls_publisher_->publish(arena_walls_);
 
-    lidar();
+    // lidar();
     
     sensor_data_pub();
 
@@ -834,7 +845,7 @@ private:
       fake_lidar_publisher_->publish(lidar_data_);
     }
 
-      RCLCPP_INFO(this->get_logger(), "Seed: %f, Num robots: %d", seed_, num_robots_);
+      RCLCPP_INFO(this->get_logger(), "Seed: %d, Num robots: %d", seed_, num_robots_);
   }
 
   /// \brief Ensures all values are passed via .yaml file, and they're reasonable
@@ -903,13 +914,13 @@ private:
       throw std::runtime_error("Incorrect params in diff_params.yaml!");
     }
 
-    if (seed_ == -1.0)
+    if (seed_ == 0)
     {
       throw std::runtime_error("Missing seed value!");
     }
-    else if (seed_ < 0.0 || seed_ > 1.0)
+    else if (seed_ > max_seed_)
     {
-      RCLCPP_ERROR(this->get_logger(), "Seed: %f", seed_);
+      RCLCPP_ERROR(this->get_logger(), "Seed: %d", seed_);
       throw std::runtime_error("Improper seed value!");
     }
   }
