@@ -223,10 +223,6 @@ public:
     // Check all params
     check_yaml_params();
 
-    // Initialize the differential drive kinematic state
-    // turtle_ = turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0_, x0_, y0_}};
-    turtle_ = turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{0, 0, 0}};
-
     // Initialize the noise generators
     motor_control_noise_ = std::normal_distribution<>{0.0, std::sqrt(input_noise_)}; // Uncertainity in motor control
     wheel_slip_ = std::uniform_real_distribution<>{-slip_fraction_, slip_fraction_}; // Wheel slipping
@@ -235,7 +231,7 @@ public:
     // Timer timestep [seconds]
     dt_ = 1.0 / static_cast<double>(rate);
 
-    // Initialize Pseduo Random environment
+    // Initialize Pseudo Random environment
     std::srand((unsigned) seed_);
 
     // Assuming max and min to be integers for simplicity
@@ -248,6 +244,29 @@ public:
     // Create obstacles
     create_walls();
 
+    // Initialize Pseudo Random Turtles
+
+    double x0, y0, theta0;
+    for (int i = 0; i < num_robots_; i++)
+    // for (int i = 0; i < 3; i++)
+    {
+      // Select random empty spawn point
+      std::pair<int, int> spawn_point = empty_spawn_points_.at(std::rand() % static_cast<int>(empty_spawn_points_.size()));
+      spawn_points_.push_back(spawn_point);
+
+      // Infer pseudo random pose from selection
+      x0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.first - 1) - (arena_x_ - 1.0) / 2.0;
+      y0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.second - 1) - (arena_y_ - 1.0) / 2.0;
+      theta0 = static_cast<double>(std::rand() % 4) * turtlelib::PI / 2.0;
+      // theta0 = 0.0;
+    
+      // Initialize the differential drive kinematic state
+      turtles_.push_back(turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0, x0, y0}});
+
+      // RCLCPP_ERROR(this->get_logger(), "i j %d %d", spawn_point.first, spawn_point.second);
+      // RCLCPP_ERROR(this->get_logger(), "x  y theta %f %f %f", turtle_.pose().x, turtle_.pose().y, turtle_.pose().theta);
+    }
+
     // Create ~/timestep publisher
     timestep_publisher_ = create_publisher<std_msgs::msg::UInt64>("~/timestep", 10);
     // Create ~/obstacles publisher
@@ -259,8 +278,13 @@ public:
     // Create red/sensor_data publisher
     sensor_data_publisher_ = create_publisher<nuturtlebot_msgs::msg::SensorData>(
       "red/sensor_data", 10);
-    // Create red/path publisher
-    red_path_publisher_ = create_publisher<nav_msgs::msg::Path>("red/path", 10);
+    // Create color/path publishers
+    for(int i = 0; i < num_robots_; i++)
+    {
+      nav_path_publishers_.push_back(create_publisher<nav_msgs::msg::Path>(colors_.at(i) + "/path", 10));
+      paths_.push_back(nav_msgs::msg::Path{});
+    }
+
     // Create /fake_lidar_scan
     fake_lidar_publisher_ =
       create_publisher<sensor_msgs::msg::LaserScan>("~/fake_lidar_scan", 10);
@@ -313,7 +337,8 @@ private:
   double wall_height_ = 0.25;   // Height of walls [m]
   visualization_msgs::msg::MarkerArray arena_walls_;
   visualization_msgs::msg::MarkerArray walls_;
-  std::vector<std::pair<int, int>> empty_spaces_;
+  std::vector<std::pair<int, int>> empty_spawn_points_;
+  std::vector<std::pair<int, int>> spawn_points_;
 
   // Variables related to diff drive
   double wheel_radius_ = -1.0;
@@ -322,11 +347,12 @@ private:
   nuturtlebot_msgs::msg::SensorData prev_sensor_data_; // Encoder ticks
   double encoder_ticks_per_rad_;
   double motor_cmd_per_rad_sec_;
-  turtlelib::DiffDrive turtle_;
+  std::vector<turtlelib::DiffDrive> turtles_;
+  std::vector<std::string> colors_ = {"cyan", "magenta", "yellow", "red", "green", "blue", "orange", "brown", "white"};
 
   // Variables related to visualization
-  geometry_msgs::msg::PoseStamped red_path_pose_stamped_;
-  nav_msgs::msg::Path red_path_;
+  geometry_msgs::msg::PoseStamped path_pose_stamped_;
+  std::vector<nav_msgs::msg::Path> paths_;
   int path_frequency_ = 100; // per timer callback
 
   // Variables related to noise and sensing
@@ -358,7 +384,7 @@ private:
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_server_;
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr wheel_cmd_subscriber_;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr red_path_publisher_;
+  std::vector<rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> nav_path_publishers_;
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr fake_lidar_publisher_;
 
   /// \brief Reset the simulation
@@ -367,9 +393,9 @@ private:
     std_srvs::srv::Empty::Response::SharedPtr)
   {
     timestep_ = 0;
-    turtle_.q.x = 0.0;
-    turtle_.q.y = 0.0;
-    turtle_.q.theta = 0.0;
+    turtles_.at(0).q.x = 0.0;
+    turtles_.at(0).q.y = 0.0;
+    turtles_.at(0).q.theta = 0.0;
   }
 
   /// \brief Teleport the robot to a specified pose
@@ -377,35 +403,39 @@ private:
     multisim::srv::Teleport::Request::SharedPtr request,
     multisim::srv::Teleport::Response::SharedPtr)
   {
-    turtle_.q.x = request->x;
-    turtle_.q.y = request->y;
-    turtle_.q.theta = request->theta;
+    turtles_.at(0).q.x = request->x;
+    turtles_.at(0).q.y = request->y;
+    turtles_.at(0).q.theta = request->theta;
   }
 
   /// \brief Broadcast the TF frames of the robot
-  void broadcast_red_turtle()
+  void broadcast_all_turtles()
   {
-    geometry_msgs::msg::TransformStamped t_;
+    for(int i = 0; i < num_robots_; i++)
+    // for(int i = 0; i < 3; i++)
+    {
+      geometry_msgs::msg::TransformStamped t_;
 
-    t_.header.stamp = get_clock()->now();
-    t_.header.frame_id = "multisim/world";
-    t_.child_frame_id = "red/base_footprint";
-    t_.transform.translation.x = turtle_.pose().x;
-    t_.transform.translation.y = turtle_.pose().y;
-    t_.transform.translation.z = 0.0;     
+      t_.header.stamp = get_clock()->now();
+      t_.header.frame_id = "multisim/world";
+      t_.child_frame_id = colors_.at(i) + "/base_footprint";
+      t_.transform.translation.x = turtles_.at(i).pose().x;
+      t_.transform.translation.y = turtles_.at(i).pose().y;
+      t_.transform.translation.z = 0.0;     
 
-    tf2::Quaternion q_;
-    q_.setRPY(0, 0, turtle_.pose().theta);     
-    t_.transform.rotation.x = q_.x();
-    t_.transform.rotation.y = q_.y();
-    t_.transform.rotation.z = q_.z();
-    t_.transform.rotation.w = q_.w();
+      tf2::Quaternion q_;
+      q_.setRPY(0, 0, turtles_.at(i).pose().theta);     
+      t_.transform.rotation.x = q_.x();
+      t_.transform.rotation.y = q_.y();
+      t_.transform.rotation.z = q_.z();
+      t_.transform.rotation.w = q_.w();
 
-    // Send the transformation
-    tf_broadcaster_->sendTransform(t_);
+      // Send the transformation
+      tf_broadcaster_->sendTransform(t_);
+    }
 
     if (timestep_ % path_frequency_ == 1) {
-      update_red_NavPath();
+      update_all_NavPaths();
     }
   }
 
@@ -592,12 +622,13 @@ private:
         {
           if (room_grid[i][j] == 2)
           {
-            empty_spaces_.push_back({i,j});
+            empty_spawn_points_.push_back({i,j}); // Transpose
+            // empty_spawn_points_.push_back({j,i}); // Transpose
           }
         }
       }
       printVector2D(room_grid);
-      RCLCPP_ERROR(this->get_logger(), "Empty spaces known: %ld", empty_spaces_.size());
+      // RCLCPP_ERROR(this->get_logger(), "Empty spawn points known: %ld", empty_spawn_points_.size());
     }
 
     // Finally
@@ -748,26 +779,29 @@ private:
     sensor_data_publisher_->publish(current_sensor_data_);
   }
 
-  /// \brief Update Simulated turtle's nav path.
-  void update_red_NavPath()
+  // /// \brief Update Simulated turtle's nav path.
+  void update_all_NavPaths()
   {
-    // Update ground truth red turtle path
-    red_path_.header.stamp = get_clock()->now();
-    red_path_.header.frame_id = "multisim/world";
-    // Create new pose stamped
-    red_path_pose_stamped_.header.stamp = get_clock()->now();
-    red_path_pose_stamped_.header.frame_id = "multisim/world";
-    red_path_pose_stamped_.pose.position.x = turtle_.pose().x;
-    red_path_pose_stamped_.pose.position.y = turtle_.pose().y;
-    red_path_pose_stamped_.pose.position.z = 0.0;
-    tf2::Quaternion q_;
-    q_.setRPY(0, 0, turtle_.pose().theta);     // Rotation around z-axis
-    red_path_pose_stamped_.pose.orientation.x = q_.x();
-    red_path_pose_stamped_.pose.orientation.y = q_.y();
-    red_path_pose_stamped_.pose.orientation.z = q_.z();
-    red_path_pose_stamped_.pose.orientation.w = q_.w();
-    // Append pose stamped
-    red_path_.poses.push_back(red_path_pose_stamped_);
+    for (int i = 0; i < num_robots_; i++)
+    {
+      // Update ground truth red turtle path
+      paths_.at(i).header.stamp = get_clock()->now();
+      paths_.at(i).header.frame_id = "multisim/world";
+      // Create new pose stamped
+      path_pose_stamped_.header.stamp = get_clock()->now();
+      path_pose_stamped_.header.frame_id = "multisim/world";
+      path_pose_stamped_.pose.position.x = turtles_.at(i).pose().x;
+      path_pose_stamped_.pose.position.y = turtles_.at(i).pose().y;
+      path_pose_stamped_.pose.position.z = 0.0;
+      tf2::Quaternion q_;
+      q_.setRPY(0, 0, turtles_.at(i).pose().theta);     // Rotation around z-axis
+      path_pose_stamped_.pose.orientation.x = q_.x();
+      path_pose_stamped_.pose.orientation.y = q_.y();
+      path_pose_stamped_.pose.orientation.z = q_.z();
+      path_pose_stamped_.pose.orientation.w = q_.w();
+      // Append pose stamped
+      paths_.at(i).poses.push_back(path_pose_stamped_);
+    }
   }
 
   // /// \brief Indicate and handle collisions
@@ -1015,9 +1049,12 @@ private:
     
     sensor_data_pub();
 
-    broadcast_red_turtle();
+    broadcast_all_turtles();
 
-    red_path_publisher_->publish(red_path_);
+    for(int i = 0; i < num_robots_; i++)
+    {
+      nav_path_publishers_.at(i)->publish(paths_.at(i));
+    }
 
     // Publish at lidar_frequency_ despite the timer frequency
     if (timestep_ % static_cast<int>(rate / lidar_frequency_) == 1)
