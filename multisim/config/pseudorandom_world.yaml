@@ -7,5 +7,5 @@
     min_corridor_width: 0.5
     wall_breadth: 0.1
     wall_length: 1.0
-    wall_num: 10
+    wall_num: 30
     

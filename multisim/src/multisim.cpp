@@ -39,6 +39,7 @@
 #include <memory>
 #include <string>
 #include <random>
+#include <queue>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -237,14 +238,15 @@ public:
     // Initialize Pseduo Random environment
     std::srand((unsigned) seed_);
 
-    arena_x_ = std::fmod(static_cast<double>(std::rand()), (arena_x_max_ - arena_x_min_)) + arena_x_min_;
-    arena_y_ = std::fmod(static_cast<double>(std::rand()), (arena_y_max_ - arena_y_min_)) + arena_y_min_;
+    // Assuming max and min to be integers for simplicity
+    arena_x_ = static_cast<double>(std::rand() % static_cast<int>(arena_x_max_ - arena_x_min_)) + arena_x_min_;
+    arena_y_ = static_cast<double>(std::rand() % static_cast<int>(arena_y_max_ - arena_y_min_)) + arena_y_min_;
 
     // Create arena
     create_arena_walls();
 
     // Create obstacles
-    // create_walls();
+    create_walls();
 
     // Create ~/timestep publisher
     timestep_publisher_ = create_publisher<std_msgs::msg::UInt64>("~/timestep", 10);
@@ -406,37 +408,204 @@ private:
     }
   }
 
-  // /// \brief Create obstacles as a MarkerArray and publish them to a topic to display them in Rviz
-  // void create_obstacles_array()
-  // {
-  //   if (obstacles_x_.size() != obstacles_y_.size()) {
-  //     throw std::runtime_error("x and y coordinate lists are not the same length!");
-  //   }
+  /// \brief Create obstacles as a MarkerArray and publish them to a topic to display them in Rviz
+  void create_walls()
+  {
 
-  //   for (size_t i = 0; i < obstacles_x_.size(); i++) {
-  //     visualization_msgs::msg::Marker obstacle_;
-  //     obstacle_.header.frame_id = "multisim/world";
-  //     obstacle_.header.stamp = get_clock()->now();
-  //     obstacle_.id = i;
-  //     obstacle_.type = visualization_msgs::msg::Marker::CYLINDER;
-  //     obstacle_.action = visualization_msgs::msg::Marker::ADD;
-  //     obstacle_.pose.position.x = obstacles_x_.at(i);
-  //     obstacle_.pose.position.y = obstacles_y_.at(i);
-  //     obstacle_.pose.position.z = obstacles_h_ / 2.0;
-  //     obstacle_.pose.orientation.x = 0.0;
-  //     obstacle_.pose.orientation.y = 0.0;
-  //     obstacle_.pose.orientation.z = 0.0;
-  //     obstacle_.pose.orientation.w = 1.0;
-  //     obstacle_.scale.x = obstacles_r_ * 2.0;   // Diameter in x
-  //     obstacle_.scale.y = obstacles_r_ * 2.0;   // Diameter in y
-  //     obstacle_.scale.z = obstacles_h_;         // Height
-  //     obstacle_.color.r = 1.0f;
-  //     obstacle_.color.g = 0.0f;
-  //     obstacle_.color.b = 0.0f;
-  //     obstacle_.color.a = 1.0;
-  //     obstacles_.markers.push_back(obstacle_);
-  //   }
-  // }
+    for (size_t i = 0; i < static_cast<size_t>(wall_num_); i++)
+    {
+      visualization_msgs::msg::Marker wall_;
+      wall_.header.frame_id = "multisim/world";
+      wall_.header.stamp = get_clock()->now();
+      wall_.id = i;
+      wall_.type = visualization_msgs::msg::Marker::CUBE;
+      wall_.action = visualization_msgs::msg::Marker::ADD;
+
+      bool horizontal = std::rand() % 2 == 1 ? true : false;
+
+      if (horizontal)
+      {
+        // Position
+        wall_.pose.position.x = min_corridor_width_ * (std::rand() % (static_cast<int>((arena_x_ - 1.0) / min_corridor_width_) + 1)) - (arena_x_ - 1.0) / 2.0;
+        wall_.pose.position.y = min_corridor_width_ * (std::rand() % (static_cast<int>((arena_y_ - 1.0) / min_corridor_width_) + 1)) - (arena_y_ - 1.0) / 2.0;
+
+        // Wall dimensions
+        wall_.scale.x = wall_length_;   
+        wall_.scale.y = wall_breadth_;  
+      }
+      else
+      {
+        // Position
+        wall_.pose.position.x = min_corridor_width_ * (std::rand() % (static_cast<int>((arena_x_ - 1.0) / min_corridor_width_) + 1)) - (arena_x_ - 1.0) / 2.0;
+        wall_.pose.position.y = min_corridor_width_ * (std::rand() % (static_cast<int>((arena_y_ - 1.0) / min_corridor_width_) + 1)) - (arena_y_ - 1.0) / 2.0;
+
+        // Wall dimensions
+        wall_.scale.x = wall_breadth_;   
+        wall_.scale.y = wall_length_;  
+      }
+
+      // Orientation
+      wall_.pose.orientation.x = 0.0;
+      wall_.pose.orientation.y = 0.0;
+      wall_.pose.orientation.z = 0.0;
+      wall_.pose.orientation.w = 1.0;
+
+      // Height
+      wall_.pose.position.z = wall_height_ / 2.0;
+      wall_.scale.z = wall_height_;         // Height
+
+      // Color
+      wall_.color.r = 1.0f;
+      wall_.color.g = 0.0f;
+      wall_.color.b = 0.0f;
+      wall_.color.a = 1.0;
+
+      // Temporarily add wall to MarkerArray
+      walls_.markers.push_back(wall_);
+
+      if (!check_connectedness())
+      {
+        walls_.markers.pop_back();
+        --i;
+      } 
+
+      // RCLCPP_ERROR(this->get_logger(), "i: %ld", i);
+    }
+  }
+
+  bool check_connectedness()
+  {
+    // return true;
+
+    // Create a temporary room grid to represent the state of the room
+    std::vector<std::vector<int>> room_grid(static_cast<int>(arena_x_ * 2.0 / min_corridor_width_) - 1, std::vector<int>(static_cast<int>(arena_y_ * 2.0 / min_corridor_width_) - 1, 0));
+
+    // For current wall length to breadth ratio
+    static const int wall_dx[] = {-2, -1, 0, 1, 2}; 
+    static const int wall_dy[] = {-2, -1, 0, 1, 2};
+    static const double multiplier = 2.0 / min_corridor_width_;
+    static const int occupancy = sizeof(wall_dx) / sizeof(int);
+
+    // Populate grid with walls
+    int wall_x, wall_y;
+    for (size_t i = 0; i < walls_.markers.size(); i++)
+    {
+      wall_x = static_cast<int>(walls_.markers.at(i).pose.position.x * multiplier) + static_cast<int>(arena_x_ / min_corridor_width_) - 1;
+      wall_y = static_cast<int>(walls_.markers.at(i).pose.position.y * multiplier) + static_cast<int>(arena_y_ / min_corridor_width_) - 1;
+
+      // Horizontal Walls
+      if(walls_.markers.at(i).scale.x == wall_length_)
+      {
+        for(int j = 0; j < occupancy; j++)
+        {
+          room_grid[
+                      std::min(std::max(0, wall_x + wall_dx[j]), static_cast<int>(arena_x_ * 2.0 / min_corridor_width_) - 2)
+                    ]
+                    [
+                      std::min(std::max(0, wall_y), static_cast<int>(arena_y_ * 2.0 / min_corridor_width_) - 2)
+                    ] = 1;
+        }
+      }
+      // Vertical Walls
+      else if(walls_.markers.at(i).scale.y == wall_length_)
+      {
+        for(int j = 0; j < occupancy; j++)
+        {
+          room_grid[
+                      std::min(std::max(0, wall_x), static_cast<int>(arena_x_ * 2.0 / min_corridor_width_) - 2)
+                    ]
+                    [
+                      std::min(std::max(0, wall_y + wall_dy[j]), static_cast<int>(arena_y_ * 2.0 / min_corridor_width_) - 2)
+                    ] = 1;
+        }
+      }
+    }
+
+    // Perform BFS to check connectivity
+    std::queue<std::pair<int, int>> bfs_queue;
+
+    bool stop = false;
+    // Start from an arbitrary free cell
+    for(int i = 0; i < static_cast<int>(room_grid.size()); i++)
+    {
+      for (int j = 0; j < static_cast<int>(room_grid[0].size()); j++)
+      {
+        if (room_grid[i][j] == 0)
+        {
+          bfs_queue.push({i, j});
+          room_grid[i][j] = 2;
+          stop = true;
+          break;
+        }
+      }
+      if(stop)
+      {
+        break;
+      }
+    }
+    if (bfs_queue.empty())
+    {
+      throw std::runtime_error("Too many walls requested!");
+    }
+
+    int ctr = 0;
+    while (!bfs_queue.empty())
+    {
+      auto [x, y] = bfs_queue.front();
+      bfs_queue.pop();
+
+      static const int dx[] = {1, 0, -1, 0};
+      static const int dy[] = {0, 1, 0, -1};
+
+      for (int i = 0; i < 4; ++i)
+      {
+        int nx = x + dx[i];
+        int ny = y + dy[i];
+
+        if ((nx >= 0 && nx <= static_cast<int>(arena_x_ * 2.0 / min_corridor_width_) - 2) &&
+            (ny >= 0 && ny <= static_cast<int>(arena_y_ * 2.0 / min_corridor_width_) - 2) && 
+            (room_grid[nx][ny] == 0))
+        {
+          bfs_queue.push({nx, ny});
+          room_grid[nx][ny] = 2;
+        }
+      }
+      ctr++;
+    }
+
+    // Check if any cell is still unexplored
+    for(int i = 0; i < static_cast<int>(room_grid.size()); i++)
+    {
+      for (int j = 0; j < static_cast<int>(room_grid[0].size()); j++)
+      {
+        if (room_grid[i][j] == 0)
+        {
+          RCLCPP_ERROR(this->get_logger(), "BFS works %d %d", i, j);
+
+          return false; // The wall disconnects the room
+
+        }
+      }
+    }
+
+    // Otherwise
+    return true; 
+  }
+
+  // Function to print a 2D vector
+  void printVector2D(const std::vector<std::vector<int>>& vec) {
+      // Iterate over each row
+      for (const auto& row : vec) {
+          std::string rowString;
+          // Iterate over each element in the row and construct a string
+          for (int element : row) {
+              rowString += std::to_string(element) + " ";
+          }
+          // Print the row as an error message
+          RCLCPP_ERROR(rclcpp::get_logger("print_vector"), "%s", rowString.c_str());
+      }
+  }
+
 
   /// \brief Create walls as a MarkerArray and publish them to a topic to display them in Rviz
   void create_arena_walls()
@@ -844,8 +1013,6 @@ private:
     {
       fake_lidar_publisher_->publish(lidar_data_);
     }
-
-      RCLCPP_INFO(this->get_logger(), "Seed: %d, Num robots: %d", seed_, num_robots_);
   }
 
   /// \brief Ensures all values are passed via .yaml file, and they're reasonable

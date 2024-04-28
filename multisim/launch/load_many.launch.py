@@ -12,7 +12,7 @@ from ament_index_python.packages import get_package_share_directory
 
 import random
 
-colors = ["cyan", "magenta", "yellow", "red", "blue", "green", "orange", "brown", "white"]
+colors = ["cyan", "magenta", "yellow", "red", "green", "blue", "orange", "brown", "white"]
 
 def launch_setup(context):
 

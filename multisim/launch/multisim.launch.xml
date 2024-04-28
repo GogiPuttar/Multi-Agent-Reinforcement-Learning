@@ -27,7 +27,7 @@
   </include>
 
   <!-- Argument to specify configuration file for simulator. -->
-  <arg name="world_config" default="basic_world.yaml" 
+  <arg name="world_config" default="pseudorandom_world.yaml" 
    description=".yaml file to configure the world"/>
 
   <!-- Argument to specify configuration file for robot. -->
