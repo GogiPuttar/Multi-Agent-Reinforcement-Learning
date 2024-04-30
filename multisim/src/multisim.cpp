@@ -248,7 +248,6 @@ public:
 
     double x0, y0, theta0;
     for (int i = 0; i < num_robots_; i++)
-    // for (int i = 0; i < 3; i++)
     {
       // Select random empty spawn point
       std::pair<int, int> spawn_point = empty_spawn_points_.at(std::rand() % static_cast<int>(empty_spawn_points_.size()));
@@ -258,13 +257,9 @@ public:
       x0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.first - 1) - (arena_x_ - 1.0) / 2.0;
       y0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.second - 1) - (arena_y_ - 1.0) / 2.0;
       theta0 = static_cast<double>(std::rand() % 4) * turtlelib::PI / 2.0;
-      // theta0 = 0.0;
     
       // Initialize the differential drive kinematic state
       turtles_.push_back(turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0, x0, y0}});
-
-      // RCLCPP_ERROR(this->get_logger(), "i j %d %d", spawn_point.first, spawn_point.second);
-      // RCLCPP_ERROR(this->get_logger(), "x  y theta %f %f %f", turtle_.pose().x, turtle_.pose().y, turtle_.pose().theta);
     }
 
     // Create ~/timestep publisher
@@ -278,16 +273,17 @@ public:
     // Create red/sensor_data publisher
     sensor_data_publisher_ = create_publisher<nuturtlebot_msgs::msg::SensorData>(
       "red/sensor_data", 10);
-    // Create color/path publishers
+    
     for(int i = 0; i < num_robots_; i++)
     {
+      // Create color/path publishers
       nav_path_publishers_.push_back(create_publisher<nav_msgs::msg::Path>(colors_.at(i) + "/path", 10));
       paths_.push_back(nav_msgs::msg::Path{});
-    }
 
-    // Create /fake_lidar_scan
-    fake_lidar_publisher_ =
-      create_publisher<sensor_msgs::msg::LaserScan>("~/fake_lidar_scan", 10);
+      // Create color/fake_lidar_scan
+      fake_lidar_publishers_.push_back(create_publisher<sensor_msgs::msg::LaserScan>(colors_.at(i) + "/fake_lidar_scan", 10));
+      lidars_data_.push_back(sensor_msgs::msg::LaserScan{});
+    }
 
     // Create ~/reset service
     reset_server_ = create_service<std_srvs::srv::Empty>(
@@ -365,7 +361,7 @@ private:
   double collision_radius_;
   bool lie_group_collision_ = true;
   bool colliding_ = false;
-  sensor_msgs::msg::LaserScan lidar_data_;
+  std::vector<sensor_msgs::msg::LaserScan> lidars_data_;
   double lidar_variance_;
   double lidar_min_range_;
   double lidar_max_range_;
@@ -385,7 +381,7 @@ private:
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr wheel_cmd_subscriber_;
   std::vector<rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> nav_path_publishers_;
-  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr fake_lidar_publisher_;
+  std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> fake_lidar_publishers_;
 
   /// \brief Reset the simulation
   void reset_callback(
@@ -628,7 +624,6 @@ private:
         }
       }
       printVector2D(room_grid);
-      // RCLCPP_ERROR(this->get_logger(), "Empty spawn points known: %ld", empty_spawn_points_.size());
     }
 
     // Finally
@@ -854,187 +849,174 @@ private:
   //   throw std::runtime_error("Invalid collision! Check collision simulation!");
   // }
 
-  // /// \brief Fake lidar data
-  // void lidar()
-  // {
-  //   lidar_data_.header.frame_id = "red/base_scan";
-  //   lidar_data_.header.stamp = get_clock()->now();
-  //   lidar_data_.angle_min = 0.0;
-  //   lidar_data_.angle_max = turtlelib::deg2rad(360.0); // convert degrees to radians
-  //   lidar_data_.angle_increment = turtlelib::deg2rad(lidar_angle_increment_); // convert degrees to radians
-  //   lidar_data_.time_increment = 0.0005574136157520115;
-  //   lidar_data_.time_increment = 0.0;
-  //   lidar_data_.scan_time = 1.0 / lidar_frequency_;
-  //   lidar_data_.range_min = lidar_min_range_;
-  //   lidar_data_.range_max = lidar_max_range_;
-  //   lidar_data_.ranges.resize(lidar_num_samples_);
+  /// \brief Fake lidar data
+  void lidar()
+  {
+    for(int i = 0; i < num_robots_; i++)
+    {
+      lidars_data_.at(i).header.frame_id = colors_.at(i) + "/base_scan";
+      lidars_data_.at(i).header.stamp = get_clock()->now();
+      lidars_data_.at(i).angle_min = 0.0;
+      lidars_data_.at(i).angle_max = turtlelib::deg2rad(360.0); // convert degrees to radians
+      lidars_data_.at(i).angle_increment = turtlelib::deg2rad(lidar_angle_increment_); // convert degrees to radians
+      lidars_data_.at(i).time_increment = 0.0005574136157520115;
+      lidars_data_.at(i).time_increment = 0.0;
+      lidars_data_.at(i).scan_time = 1.0 / lidar_frequency_;
+      lidars_data_.at(i).range_min = lidar_min_range_;
+      lidars_data_.at(i).range_max = lidar_max_range_;
+      lidars_data_.at(i).ranges.resize(lidar_num_samples_);
 
-  //   // Offset between LIDAR and Footprint (fixed, unless things go very ugly)
-  //   turtlelib::Pose2D lidar_pose_{turtle_.pose().theta, turtle_.pose().x - 0.032*cos(turtle_.pose().theta), turtle_.pose().y - 0.032*sin(turtle_.pose().theta)};
+      // Offset between LIDAR and Footprint (fixed, unless things go very ugly)
+      turtlelib::Pose2D lidar_pose_{turtles_.at(i).pose().theta, turtles_.at(i).pose().x - 0.032*cos(turtles_.at(i).pose().theta), turtles_.at(i).pose().y - 0.032*sin(turtles_.at(i).pose().theta)};
 
-  //   // Iterate over samples
-  //   for (int sample_index = 0; sample_index < lidar_num_samples_; sample_index++) 
-  //   {       
-  //     // Limit of laser in world frame
-  //     turtlelib::Point2D limit{
-  //                               lidar_pose_.x + lidar_max_range_ * cos(sample_index * lidar_data_.angle_increment + lidar_pose_.theta),
-  //                               lidar_pose_.y + lidar_max_range_ * sin(sample_index * lidar_data_.angle_increment + lidar_pose_.theta)
-  //                             };
+      // Iterate over samples
+      for (int sample_index = 0; sample_index < lidar_num_samples_; sample_index++) 
+      {       
+        // Limit of laser in world frame
+        turtlelib::Point2D limit{
+                                  lidar_pose_.x + lidar_max_range_ * cos(sample_index * lidars_data_.at(i).angle_increment + lidar_pose_.theta),
+                                  lidar_pose_.y + lidar_max_range_ * sin(sample_index * lidars_data_.at(i).angle_increment + lidar_pose_.theta)
+                                };
 
-  //     // Slope of laser trace in world frame
-  //     double slope = (limit.y - lidar_pose_.y) / (limit.x - lidar_pose_.x  + 1e-7);
+        // Slope of laser trace in world frame
+        double slope = (limit.y - lidar_pose_.y) / (limit.x - lidar_pose_.x  + 1e-7);
 
-  //     // Length of laser trace
-  //     double length = lidar_max_range_;
+        double lidar_reading = lidar_max_range_;
 
-  //     double lidar_reading = lidar_max_range_;
+        // Determine intersection between laser and closest wall
 
-  //     bool wall_measured = false; // Estimate distance to wall only once
+        // 1. For randomly placed walls
+        for (size_t j = 0; j < walls_.markers.size(); j++) 
+        {
+          // Determine which kind of wall
+          double x_len = 0;
+          double y_len = 0;
+          if(walls_.markers.at(j).scale.x == wall_length_)
+          {
+            // Horizontal
+            x_len = wall_length_;
+            y_len = wall_breadth_;
+          }
+          else if(walls_.markers.at(j).scale.y == wall_length_)
+          {
+            // Vertical
+            x_len = wall_breadth_;
+            y_len = wall_length_;
+          }
 
-  //     // Determine closest intersection between laser (line) and obstacles (circles), 
-  //     // determine closest obstacle outside of minimum distance, and
-  //     // snap intersection point according to laser resolution.
-  //     // Reference: [https://mathworld.wolfram.com/Circle-LineIntersection.html]
-  //     for (size_t i = 0; i < obstacles_x_.size(); i++) 
-  //     { 
-  //       // Determinant. D = x_1 * y_2 - x_2 * y_1, relative to the obstacle
-  //       double D = (lidar_pose_.x - obstacles_x_.at(i)) // x_1
-  //                   * (limit.y - obstacles_y_.at(i)) // y_2
-  //                   - (limit.x - obstacles_x_.at(i)) // x_2 
-  //                   * (lidar_pose_.y - obstacles_y_.at(i)); // y_1
+          // West face
+          if ((turtles_.at(i).pose().x < walls_.markers.at(j).pose.position.x - x_len/2.0) && 
+              (walls_.markers.at(j).pose.position.x - x_len/2.0 < limit.x))
+          {
+            // Check if y_intercept lies on the wall
+            double y_intercept = turtles_.at(i).pose().y + slope * (walls_.markers.at(j).pose.position.x - x_len/2.0 - turtles_.at(i).pose().x);
 
-  //       // Discriminant. delta = r^2 * (d_r)^2 - D^2
-  //       double delta = std::pow(obstacles_r_, 2) * std::pow(length, 2) - std::pow(D, 2); 
+            if (std::fabs(y_intercept - walls_.markers.at(j).pose.position.y) < y_len / 2.0)
+            {
+              turtlelib::Vector2D laser_vector{(walls_.markers.at(j).pose.position.x - x_len/2.0 - turtles_.at(i).pose().x), 0};
+              laser_vector.y = laser_vector.x * slope;
 
-  //       // delta < 0 => No intersection.
-  //       if (delta < 0.0)
-  //       {
-  //         // Estimate where laser hits the wall, if not already estimated
-  //         if(!wall_measured)
-  //         {
-  //           // North Wall reading
-  //           if(limit.y > arena_y_/2.0)
-  //           {
-  //             turtlelib::Vector2D laser_vector{ 0, arena_y_/2.0 - lidar_pose_.y};
-  //             laser_vector.x = laser_vector.y / (slope  + 1e-7);
+              lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+            }
+          }
 
-  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
-  //             {
-  //               lidar_reading = turtlelib::magnitude(laser_vector);
-  //             }
-  //           }
-  //           // West Wall reading
-  //           if(limit.x < -arena_x_/2.0)
-  //           {
-  //             turtlelib::Vector2D laser_vector{ -arena_x_/2.0 - lidar_pose_.x, 0};
-  //             laser_vector.y = laser_vector.x * slope;
+          // East face
+          if ((limit.x < walls_.markers.at(j).pose.position.x + x_len/2.0) &&
+              (walls_.markers.at(j).pose.position.x + x_len/2.0 < turtles_.at(i).pose().x))
+          {
+            // Check if y_intercept lies on the wall
+            double y_intercept = turtles_.at(i).pose().y + slope * (walls_.markers.at(j).pose.position.x + x_len/2.0 - turtles_.at(i).pose().x);
 
-  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
-  //             {
-  //               lidar_reading = turtlelib::magnitude(laser_vector);
-  //             }
-  //           }
-  //           // South Wall reading
-  //           if(limit.y < -arena_y_/2.0)
-  //           {
-  //             turtlelib::Vector2D laser_vector{ 0, -arena_y_/2.0 - lidar_pose_.y};
-  //             laser_vector.x = laser_vector.y / (slope  + 1e-7);
+            if (std::fabs(y_intercept - walls_.markers.at(j).pose.position.y) < y_len / 2.0)
+            {
+              turtlelib::Vector2D laser_vector{(walls_.markers.at(j).pose.position.x + x_len/2.0 - turtles_.at(i).pose().x), 0};
+              laser_vector.y = laser_vector.x * slope;
 
-  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
-  //             {
-  //               lidar_reading = turtlelib::magnitude(laser_vector);
-  //             }
-  //           }
-  //           // East Wall reading
-  //           if(limit.x > arena_x_/2.0)
-  //           {
-  //             turtlelib::Vector2D laser_vector{ arena_x_/2.0 - lidar_pose_.x, 0};
-  //             laser_vector.y = laser_vector.x * slope;
+              lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+            }
+          }
 
-  //             if(lidar_reading > turtlelib::magnitude(laser_vector))
-  //             {
-  //               lidar_reading = turtlelib::magnitude(laser_vector);
-  //             }
-  //           }
-  //           wall_measured = true;
-  //         }
-  //       }
-        
-  //       // delta = 0 => Tangent.
-  //       else if (delta == 0.0)
-  //       {
-  //         double d_x = limit.x - lidar_pose_.x;
-  //         double d_y = limit.y - lidar_pose_.y;
+          // South face
+          if ((turtles_.at(i).pose().y < walls_.markers.at(j).pose.position.y - y_len/2.0) && 
+              (walls_.markers.at(j).pose.position.y - y_len/2.0 < limit.y))
+          {
+            // Check if x_intercept lies on the wall
+            double x_intercept = turtles_.at(i).pose().x + (1.0 / (slope + 1e-7)) * (walls_.markers.at(j).pose.position.y - y_len/2.0 - turtles_.at(i).pose().y);
 
-  //         // One solution
+            if (std::fabs(x_intercept - walls_.markers.at(j).pose.position.x) < x_len / 2.0)
+            {
+              turtlelib::Vector2D laser_vector{0, walls_.markers.at(j).pose.position.y - y_len/2.0 - turtles_.at(i).pose().y};
+              laser_vector.x = laser_vector.y / (slope + 1e-7);
 
-  //         turtlelib::Vector2D laser_vector{ 
-  //                                           D * d_y /(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-  //                                           -D * d_x /(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-  //                                         };
+              lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+            }
+          }
 
-  //         // This formula is for infinite lines however, our LIDAR is unidirectional.
-  //         if((laser_vector.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-  //         {
-  //           if(lidar_reading > turtlelib::magnitude(laser_vector))
-  //           {
-  //             lidar_reading = turtlelib::magnitude(laser_vector);
-  //           }
-  //         }
-  //       }
+          // North face
+          if ((limit.y < walls_.markers.at(j).pose.position.y + y_len/2.0) &&
+              (walls_.markers.at(j).pose.position.y + y_len/2.0 < turtles_.at(i).pose().y))
+          {
+            // Check if y_intercept lies on the wall
+            double x_intercept = turtles_.at(i).pose().x + (1.0 / (slope + 1e-7)) * (walls_.markers.at(j).pose.position.y + y_len/2.0 - turtles_.at(i).pose().y);
 
-  //       // delta > 0 => Secant.
-  //       else if (delta > 0.0)
-  //       {
-  //         double d_x = limit.x - lidar_pose_.x;
-  //         double d_y = limit.y - lidar_pose_.y;
+            if (std::fabs(x_intercept - walls_.markers.at(j).pose.position.x) < x_len / 2.0)
+            {
+              turtlelib::Vector2D laser_vector{0, walls_.markers.at(j).pose.position.y + y_len/2.0 - turtles_.at(i).pose().y};
+              laser_vector.x = laser_vector.y / (slope + 1e-7);
 
-  //         // Two solutions
+              lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+            }
+          }
+        }
 
-  //         // Solution 1
-  //         turtlelib::Vector2D laser_vector_1{ 
-  //                                           (D * d_y + (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-  //                                           (-D * d_x + std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-  //                                         };
+        // 2. For arena walls
 
-  //         // This formula is for infinite lines. However, our LIDAR is unidirectional.
-  //         if((laser_vector_1.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-  //         {
-  //           if(lidar_reading > turtlelib::magnitude(laser_vector_1))
-  //           {
-  //             lidar_reading = turtlelib::magnitude(laser_vector_1);
-  //           }
-  //         }
+        // North Wall
+        if(limit.y > arena_y_/2.0)
+        {
+          turtlelib::Vector2D laser_vector{ 0, arena_y_/2.0 - lidar_pose_.y};
+          laser_vector.x = laser_vector.y / (slope  + 1e-7);
 
-  //         // Solution 2
-  //         turtlelib::Vector2D laser_vector_2{ 
-  //                                           (D * d_y - (std::fabs(d_y)/d_y) * d_x * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_x_.at(i) - lidar_pose_.x,
-  //                                           (-D * d_x - std::fabs(d_y) * std::sqrt(delta))/(std::pow(length, 2)) + obstacles_y_.at(i) - lidar_pose_.y
-  //                                         };
+          lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+        }
+        // West Wall
+        if(limit.x < -arena_x_/2.0)
+        {
+          turtlelib::Vector2D laser_vector{ -arena_x_/2.0 - lidar_pose_.x, 0};
+          laser_vector.y = laser_vector.x * slope;
 
-  //         // This formula is for infinite lines. However, our LIDAR is unidirectional.
-  //         if((laser_vector_2.x / (limit.x - lidar_pose_.x + 1e-7)) > 0.0)
-  //         {
-  //           if(lidar_reading > turtlelib::magnitude(laser_vector_2))
-  //           {
-  //             lidar_reading = turtlelib::magnitude(laser_vector_2);
-  //           }
-  //         }
-  //       }
-  //     }
+          lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+        }
+        // South Wall
+        if(limit.y < -arena_y_/2.0)
+        {
+          turtlelib::Vector2D laser_vector{ 0, -arena_y_/2.0 - lidar_pose_.y};
+          laser_vector.x = laser_vector.y / (slope  + 1e-7);
 
-  //     // Check lidar ranges
-  //     if (lidar_reading >= lidar_max_range_ || lidar_reading < lidar_min_range_) 
-  //     { 
-  //       lidar_data_.ranges.at(sample_index) = 0.0;
-  //     } 
-  //     else 
-  //     {
-  //       // Snap to lidar resolution
-  //       lidar_data_.ranges.at(sample_index) = lidar_resolution_ * round((lidar_reading + lidar_noise_(get_random())) / lidar_resolution_) ;
-  //     }
-  //   }
-  // }
+          lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+        }
+        // East Wall
+        if(limit.x > arena_x_/2.0)
+        {
+          turtlelib::Vector2D laser_vector{ arena_x_/2.0 - lidar_pose_.x, 0};
+          laser_vector.y = laser_vector.x * slope;
+
+          lidar_reading = std::min(lidar_reading, turtlelib::magnitude(laser_vector));
+        }
+
+        // Check lidar ranges
+        if (lidar_reading >= lidar_max_range_ || lidar_reading < lidar_min_range_) 
+        { 
+          lidars_data_.at(i).ranges.at(sample_index) = 0.0;
+        } 
+        else 
+        {
+          // Snap to lidar resolution
+          lidars_data_.at(i).ranges.at(sample_index) = lidar_resolution_ * round((lidar_reading + lidar_noise_(get_random())) / lidar_resolution_) ;
+        }
+      }
+    }
+  }
 
   /// \brief Main simulation time loop
   void timer_callback()
@@ -1045,7 +1027,7 @@ private:
     walls_publisher_->publish(walls_);
     arena_walls_publisher_->publish(arena_walls_);
 
-    // lidar();
+    lidar();
     
     sensor_data_pub();
 
@@ -1059,7 +1041,10 @@ private:
     // Publish at lidar_frequency_ despite the timer frequency
     if (timestep_ % static_cast<int>(rate / lidar_frequency_) == 1)
     {
-      fake_lidar_publisher_->publish(lidar_data_);
+      for(int i = 0; i < num_robots_; i++)
+      {
+        fake_lidar_publishers_.at(i)->publish(lidars_data_.at(i));
+      }
     }
   }
 
