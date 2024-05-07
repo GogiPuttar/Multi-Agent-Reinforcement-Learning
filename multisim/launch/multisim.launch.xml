@@ -9,7 +9,7 @@
    description="Specify if rviz needs to start - true, false"/>
 
   <!-- Argument to seed the randomness of environment generation. -->
-  <arg name="seed" default="3" 
+  <arg name="seed" default="1" 
    description="Seed value for randomness"/>
 
   <!-- Argument to set number of robots -->

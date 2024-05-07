@@ -49,6 +49,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "nav_msgs/msg/path.hpp"
+#include "nav_msgs/msg/occupancy_grid.hpp"
 #include "multisim/srv/teleport.hpp"
 #include "nuturtlebot_msgs/msg/wheel_commands.hpp"
 #include "nuturtlebot_msgs/msg/sensor_data.hpp"
@@ -238,6 +239,9 @@ public:
     arena_x_ = static_cast<double>(std::rand() % static_cast<int>(arena_x_max_ - arena_x_min_)) + arena_x_min_;
     arena_y_ = static_cast<double>(std::rand() % static_cast<int>(arena_y_max_ - arena_y_min_)) + arena_y_min_;
 
+    // Initialize true simplified map
+    initialize_map_msg();
+
     // Create arena
     create_arena_walls();
 
@@ -273,6 +277,8 @@ public:
     // Create red/sensor_data publisher
     sensor_data_publisher_ = create_publisher<nuturtlebot_msgs::msg::SensorData>(
       "red/sensor_data", 10);
+    // Create /true_simplified_map publisher
+    true_simplified_map_publisher_ = create_publisher<nav_msgs::msg::OccupancyGrid>("/true_simplified_map", 10);
     
     for(int i = 0; i < num_robots_; i++)
     {
@@ -335,6 +341,7 @@ private:
   visualization_msgs::msg::MarkerArray walls_;
   std::vector<std::pair<int, int>> empty_spawn_points_;
   std::vector<std::pair<int, int>> spawn_points_;
+  nav_msgs::msg::OccupancyGrid true_simplified_map_;
 
   // Variables related to diff drive
   double wheel_radius_ = -1.0;
@@ -376,6 +383,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::UInt64>::SharedPtr timestep_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr walls_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr arena_walls_publisher_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr true_simplified_map_publisher_;
   rclcpp::Publisher<nuturtlebot_msgs::msg::SensorData>::SharedPtr sensor_data_publisher_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_server_;
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
@@ -611,19 +619,32 @@ private:
     // Check if last wall has been added
     if (wall_index == static_cast<size_t>(wall_num_ - 1))
     {
-      // Populate empty spaces
-      for(int i = 0; i < static_cast<int>(room_grid.size()); i++)
+      // Record empty spawn points and Update Map message
+      for(int i = -1; i < (static_cast<int>(room_grid.size()) + 1); i++)
       {
-        for (int j = 0; j < static_cast<int>(room_grid[0].size()); j++)
+        for (int j = -1; j < (static_cast<int>(room_grid[0].size()) + 1); j++)
         {
-          if (room_grid[i][j] == 2)
+          // Padding the map
+          if (i == -1 || j == -1 || i == (static_cast<int>(room_grid.size())) || j == static_cast<int>(room_grid[0].size()))
           {
-            empty_spawn_points_.push_back({i,j}); // Transpose
-            // empty_spawn_points_.push_back({j,i}); // Transpose
+            true_simplified_map_.data[(j+1) * (true_simplified_map_.info.width) + (i+1)] = 100;
+          }
+          else
+          {
+            // Empty
+            if (room_grid[i][j] == 2)
+            {
+              empty_spawn_points_.push_back({i,j});
+              true_simplified_map_.data[(j+1) * true_simplified_map_.info.width + (i+1)] = 0;
+            }
+            // Wall
+            else if (room_grid[i][j] == 1)
+            {
+              true_simplified_map_.data[(j+1) * true_simplified_map_.info.width + (i+1)] = 100;
+            }
           }
         }
       }
-      printVector2D(room_grid);
     }
 
     // Finally
@@ -716,6 +737,26 @@ private:
       // Add wall to array
       arena_walls_.markers.push_back(arena_wall_);
     }
+  }
+
+  void initialize_map_msg()
+  {
+    true_simplified_map_.header.stamp = get_clock()->now();
+    true_simplified_map_.header.frame_id = "multisim/world";
+    true_simplified_map_.info.map_load_time = get_clock()->now();
+    true_simplified_map_.info.resolution = min_corridor_width_ / 2.0; // meters/cell
+    true_simplified_map_.info.width = static_cast<int>(arena_x_ / true_simplified_map_.info.resolution) + 1;  // cells
+    true_simplified_map_.info.height = static_cast<int>(arena_y_ / true_simplified_map_.info.resolution) + 1;  // cells
+    true_simplified_map_.info.origin.position.x = - static_cast<double>(true_simplified_map_.info.width) * true_simplified_map_.info.resolution / 2.0; // meters
+    true_simplified_map_.info.origin.position.y = - static_cast<double>(true_simplified_map_.info.height) * true_simplified_map_.info.resolution / 2.0; // meters
+    true_simplified_map_.info.origin.position.z = 0.0; // meters
+    true_simplified_map_.info.origin.orientation.x = 0.0;
+    true_simplified_map_.info.origin.orientation.y = 0.0;
+    true_simplified_map_.info.origin.orientation.z = 0.0;
+    true_simplified_map_.info.origin.orientation.w = 1.0;
+
+    // Initialize as empty map (0 for free, 100 for occupied, -1 for unknown)
+    true_simplified_map_.data.resize(true_simplified_map_.info.width * true_simplified_map_.info.height, -1);
   }
 
   /// \brief wheel_cmd_callback subscription
@@ -1026,6 +1067,7 @@ private:
     timestep_publisher_->publish(message);
     walls_publisher_->publish(walls_);
     arena_walls_publisher_->publish(arena_walls_);
+    true_simplified_map_publisher_->publish(true_simplified_map_);
 
     lidar();
     

@@ -1,0 +1,42 @@
+<launch>
+
+    <!-- Argument to specify configuration file for rviz. -->
+    <arg name="rviz_config" default="$(find-pkg-share multislam)/config/multislam.rviz" 
+     description=".rviz file to configure the simulator"/>
+  
+    <!-- Argument to specify configuration file for robot. -->
+    <arg name="use_rviz" default="true" 
+     description="Specify if rviz needs to start - true, false"/>
+  
+    <!-- Argument to seed the randomness of environment generation. -->
+    <arg name="seed" default="1" 
+     description="Seed value for randomness"/>
+  
+    <!-- Argument to set number of robots -->
+    <arg name="num_robots" default="3" 
+     description="Number of robots"/>
+  
+    <!-- Declare the RViz node -->
+    <!-- Load the config file -->
+    <node name="rviz2" pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" if="$(eval '\'$(var use_rviz)\' == \'true\'')"/>
+  
+    <!-- Main simulation launch file -->
+    <include file="$(find-pkg-share multisim)/launch/multisim.launch.xml">
+        <!-- Pass required arguments to the launch file -->
+        <arg name="num_robots" value="$(var num_robots)"/>
+        <arg name="seed" value="$(var seed)"/>
+        <arg name="use_rviz" value="false"/>
+    </include>
+
+    <!-- Launch multiple SLAM units -->
+    <include file="$(find-pkg-share multislam)/launch/load_many_slam.launch.py">
+      <!-- Pass required arguments to the Python launch file -->
+      <arg name="iterations" value="$(var num_robots)" />
+    </include>
+
+    <!-- Launch Map Combiner -->
+    <node pkg="multislam" exec="map_combiner" name="map_combiner">
+      <param name="num_robots" value="$(var num_robots)"/>
+    </node>
+
+  </launch>
