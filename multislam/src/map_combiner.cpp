@@ -141,7 +141,7 @@ private:
         // Look at each minimap
         const int minimap_dim = static_cast<int>(proposed_simplified_map_.info.resolution / new_map.info.resolution); // cells
 
-        const int obstacle_threshold = 5; // 5
+        const int obstacle_threshold = 6; // 5
         const int free_threshold = 6; // 6
 
         for (size_t i = 0; i < proposed_simplified_map_.info.width; i++)
