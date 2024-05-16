@@ -141,8 +141,8 @@ private:
         // Look at each minimap
         const int minimap_dim = static_cast<int>(proposed_simplified_map_.info.resolution / new_map.info.resolution); // cells
 
-        const int obstacle_threshold = 6; // 5
-        const int free_threshold = 6; // 6
+        const int obstacle_threshold = 3; // 5
+        const int free_threshold = 3; // 6
 
         for (size_t i = 0; i < proposed_simplified_map_.info.width; i++)
         {
@@ -190,21 +190,24 @@ private:
                     }
                 }
 
+                // double r = 
+                // double normalized_obstacle_count = 
+
                 // Mark cells as free or obstacle. Obstacles given priority.
                 if (free_count >= free_threshold) {
                     // Mark the current cell in the low-resolution map as an obstacle
                     int current_cell_idx = j * proposed_simplified_map_.info.width + i;
                     proposed_simplified_map_.data[current_cell_idx] = 0;
                 }
-
                 if (obstacle_count >= obstacle_threshold) {
+                // if (obstacle_count > 0) {
                     // Mark the current cell in the low-resolution map as an obstacle
                     int current_cell_idx = j * proposed_simplified_map_.info.width + i;
                     proposed_simplified_map_.data[current_cell_idx] = 100;
+                    // proposed_simplified_map_.data[current_cell_idx] = obstacle_count * 10;
                 }
             }
         }
-
         proposed_simplified_map_publisher_->publish(proposed_simplified_map_);
     }
 };
