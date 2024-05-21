@@ -20,6 +20,7 @@ find_package(visualization_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(turtlelib REQUIRED)
+find_package(nuturtlebot_msgs REQUIRED)
 
 if(NOT CMAKE_CROSSCOMPILING)
     # CMake also has the ability to generate doxygen documentation
@@ -28,13 +29,13 @@ if(NOT CMAKE_CROSSCOMPILING)
     doxygen_add_docs(doxygen src/ README.md ALL)
 endif()
 
-# rosidl_generate_interfaces(${PROJECT_NAME}_srv
+rosidl_generate_interfaces(${PROJECT_NAME}_srv
   # "srv/InitialPose.srv"
-  # "srv/Control.srv"
-  # LIBRARY_NAME ${PROJECT_NAME}
-# )
+  "srv/Control.srv"
+  LIBRARY_NAME ${PROJECT_NAME}
+)
 
-# rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME}_srv "rosidl_typesupport_cpp")
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME}_srv "rosidl_typesupport_cpp")
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -48,21 +49,21 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-# add_executable(turtle_control src/turtle_control.cpp)
+add_executable(turtle_control src/turtle_control.cpp)
 # add_executable(odometry src/odometry.cpp)
-# add_executable(circle src/circle.cpp)
+add_executable(circle src/circle.cpp)
 
-# ament_target_dependencies(turtle_control rclcpp geometry_msgs std_msgs sensor_msgs)
-# target_link_libraries(turtle_control turtlelib::turtlelib "${cpp_typesupport_target}")
+ament_target_dependencies(turtle_control rclcpp geometry_msgs std_msgs sensor_msgs nuturtlebot_msgs)
+target_link_libraries(turtle_control turtlelib::turtlelib "${cpp_typesupport_target}")
 # ament_target_dependencies(odometry rclcpp sensor_msgs tf2_ros tf2 geometry_msgs nav_msgs)
 # target_link_libraries(odometry turtlelib::turtlelib "${cpp_typesupport_target}")
-# ament_target_dependencies(circle rclcpp geometry_msgs std_srvs)
-# target_link_libraries(circle "${cpp_typesupport_target}")
+ament_target_dependencies(circle rclcpp geometry_msgs std_srvs)
+target_link_libraries(circle "${cpp_typesupport_target}")
 
 install(TARGETS
-  # turtle_control
+  turtle_control
   # odometry
-  # circle
+  circle
   DESTINATION lib/${PROJECT_NAME}
 )
 

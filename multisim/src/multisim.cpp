@@ -274,9 +274,6 @@ public:
     // Create ~/walls publisher
     arena_walls_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>("~/arena_walls", 10);
-    // Create red/sensor_data publisher
-    sensor_data_publisher_ = create_publisher<nuturtlebot_msgs::msg::SensorData>(
-      "red/sensor_data", 10);
     // Create /true_simplified_map publisher
     true_simplified_map_publisher_ = create_publisher<nav_msgs::msg::OccupancyGrid>("/true_simplified_map", 10);
     
@@ -289,6 +286,12 @@ public:
       // Create color/fake_lidar_scan
       fake_lidar_publishers_.push_back(create_publisher<sensor_msgs::msg::LaserScan>(colors_.at(i) + "/fake_lidar_scan", 10));
       lidars_data_.push_back(sensor_msgs::msg::LaserScan{});
+
+      // Create color/sensor_data publisher (encoder data)
+      sensor_data_publishers_.push_back(create_publisher<nuturtlebot_msgs::msg::SensorData>(
+        colors_.at(i) + "/sensor_data", 10));
+      current_sensor_data_.push_back(nuturtlebot_msgs::msg::SensorData{});
+      prev_sensor_data_.push_back(nuturtlebot_msgs::msg::SensorData{});
     }
 
     // Create ~/reset service
@@ -308,10 +311,37 @@ public:
       std::chrono::milliseconds(1000 / rate),
       std::bind(&Multisim::timer_callback, this));
 
-    // Create red/wheel_cmd
-    wheel_cmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
-      "red/wheel_cmd", 10, std::bind(
-        &Multisim::wheel_cmd_callback, this,
+    // // Create red/wheel_cmd
+    // wheel_cmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    //   "red/wheel_cmd", 10, std::bind(
+    //     &Multisim::wheel_cmd_callback, this,
+    //     std::placeholders::_1));
+
+    // Create color/wheel_cmd subscriber
+    // Literally the least problematic way to do this
+    cyan_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "cyan/wheel_cmd", 10, std::bind(
+        &Multisim::cyan_wheelcmd_callback, this,
+        std::placeholders::_1));
+    magenta_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "magenta/wheel_cmd", 10, std::bind(
+        &Multisim::magenta_wheelcmd_callback, this,
+        std::placeholders::_1));
+    yellow_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "yellow/wheel_cmd", 10, std::bind(
+        &Multisim::yellow_wheelcmd_callback, this,
+        std::placeholders::_1));
+    red_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "red/wheel_cmd", 10, std::bind(
+        &Multisim::red_wheelcmd_callback, this,
+        std::placeholders::_1));
+    green_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "green/wheel_cmd", 10, std::bind(
+        &Multisim::green_wheelcmd_callback, this,
+        std::placeholders::_1));
+    blue_wheelcmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
+    "blue/wheel_cmd", 10, std::bind(
+        &Multisim::blue_wheelcmd_callback, this,
         std::placeholders::_1));
   }
 
@@ -346,8 +376,8 @@ private:
   // Variables related to diff drive
   double wheel_radius_ = -1.0;
   double track_width_ = -1.0;
-  nuturtlebot_msgs::msg::SensorData current_sensor_data_; // Encoder ticks
-  nuturtlebot_msgs::msg::SensorData prev_sensor_data_; // Encoder ticks
+  std::vector<nuturtlebot_msgs::msg::SensorData> current_sensor_data_; // Encoder ticks
+  std::vector<nuturtlebot_msgs::msg::SensorData> prev_sensor_data_; // Encoder ticks
   double encoder_ticks_per_rad_;
   double motor_cmd_per_rad_sec_;
   std::vector<turtlelib::DiffDrive> turtles_;
@@ -367,7 +397,6 @@ private:
   visualization_msgs::msg::MarkerArray sensed_obstacles_;
   double collision_radius_;
   bool lie_group_collision_ = true;
-  bool colliding_ = false;
   std::vector<sensor_msgs::msg::LaserScan> lidars_data_;
   double lidar_variance_;
   double lidar_min_range_;
@@ -384,12 +413,18 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr walls_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr arena_walls_publisher_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr true_simplified_map_publisher_;
-  rclcpp::Publisher<nuturtlebot_msgs::msg::SensorData>::SharedPtr sensor_data_publisher_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_server_;
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
-  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr wheel_cmd_subscriber_;
   std::vector<rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> nav_path_publishers_;
   std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> fake_lidar_publishers_;
+  std::vector<rclcpp::Publisher<nuturtlebot_msgs::msg::SensorData>::SharedPtr> sensor_data_publishers_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr cyan_wheelcmd_subscriber_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr magenta_wheelcmd_subscriber_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr yellow_wheelcmd_subscriber_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr red_wheelcmd_subscriber_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr green_wheelcmd_subscriber_;
+  rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr blue_wheelcmd_subscriber_;
+
 
   /// \brief Reset the simulation
   void reset_callback(
@@ -759,10 +794,47 @@ private:
     true_simplified_map_.data.resize(true_simplified_map_.info.width * true_simplified_map_.info.height, -1);
   }
 
-  /// \brief wheel_cmd_callback subscription
-  void wheel_cmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
-  {    
+  /// \brief wheel_cmd_callback subscriptions
 
+  // Cyan
+  void cyan_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 0);
+  }
+
+  // Magenta
+  void magenta_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 1);
+  }
+
+  // Yellow
+  void yellow_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 2);
+  }
+
+  // Red
+  void red_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 3);
+  }
+
+  // Green
+  void green_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 4);
+  }
+
+  // Blue
+  void blue_wheelcmd_callback(const nuturtlebot_msgs::msg::WheelCommands & msg)
+  {    
+    move_turtle(msg, 5);
+  }
+
+  /// \brief wheel_cmd_callback subscription
+  void move_turtle(const nuturtlebot_msgs::msg::WheelCommands & msg, const int turtle_idx)
+  {    
     nuturtlebot_msgs::msg::WheelCommands noisy_wheel_cmd_;
     
     // Add process noise if wheel is moving
@@ -785,14 +857,14 @@ private:
     }
 
     // Get current sensor data timestamp
-    current_sensor_data_.stamp = get_clock()->now();
+    current_sensor_data_.at(turtle_idx).stamp = get_clock()->now();
 
     // Update current sensor data as integer values
-    current_sensor_data_.left_encoder = round((static_cast<double>(noisy_wheel_cmd_.left_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.left_encoder);
-    current_sensor_data_.right_encoder = round((static_cast<double>(noisy_wheel_cmd_.right_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.right_encoder);
+    current_sensor_data_.at(turtle_idx).left_encoder = round((static_cast<double>(noisy_wheel_cmd_.left_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.at(turtle_idx).left_encoder);
+    current_sensor_data_.at(turtle_idx).right_encoder = round((static_cast<double>(noisy_wheel_cmd_.right_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.at(turtle_idx).right_encoder);
 
     // Set previous as current    
-    prev_sensor_data_ = current_sensor_data_;
+    prev_sensor_data_.at(turtle_idx) = current_sensor_data_.at(turtle_idx);
 
     // Simulate slipping
     double left_slip_ = wheel_slip_(get_random());  // Add slip to wheel position
@@ -802,17 +874,25 @@ private:
     turtlelib::wheelAngles delta_wheels_{(static_cast<double>(noisy_wheel_cmd_.left_velocity) * (1 + left_slip_) * motor_cmd_per_rad_sec_) * dt_, (static_cast<double>(noisy_wheel_cmd_.right_velocity) * (1 + right_slip_) * motor_cmd_per_rad_sec_) * dt_};
 
     // Detect and perform required update to transform if colliding, otherwise update trasnform normally
-    // if(!detect_and_simulate_collision(delta_wheels_))
-    // {
-    //   // Update Transform if no collision
-    //   turtle_.driveWheels(delta_wheels_);
-    // }
+    if(!detect_and_simulate_collision(delta_wheels_, turtle_idx))
+    {
+      // Update Transform if no collision
+      turtles_.at(turtle_idx).driveWheels(delta_wheels_);
+      // RCLCPP_ERROR(this->get_logger(), "DRIVING!");
+      // RCLCPP_ERROR(this->get_logger(), "Param wheel_radius: %f", wheel_radius_);
+    }
   }
 
   /// \brief Publish sensor data
   void sensor_data_pub()
   {    
-    sensor_data_publisher_->publish(current_sensor_data_);
+    if (!current_sensor_data_.empty())
+    {
+      for(int i = 0; i < num_robots_; i++)
+      {
+        sensor_data_publishers_.at(i)->publish(current_sensor_data_.at(i));
+      }
+    }
   }
 
   // /// \brief Update Simulated turtle's nav path.
@@ -840,55 +920,102 @@ private:
     }
   }
 
-  // /// \brief Indicate and handle collisions
-  // bool detect_and_simulate_collision(turtlelib::wheelAngles predicted_delta_wheels_)
-  // {    
-  //   // Predicted robot motion
-  //   turtlelib::DiffDrive predicted_turtle_ = turtle_;
-  //   predicted_turtle_.driveWheels(predicted_delta_wheels_);   
+  /// \brief Indicate and handle collisions
+  bool detect_and_simulate_collision(turtlelib::wheelAngles predicted_delta_wheels_, const int turtle_idx)
+  {    
+    // return false;
+    // Predicted robot motion
+    turtlelib::DiffDrive predicted_turtle_ = turtles_.at(turtle_idx);
+    predicted_turtle_.driveWheels(predicted_delta_wheels_);   
 
-  //   turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
-  //   turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
+    turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
+    turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
+    turtlelib::Vector2D robotshift_world{};
+    bool colliding = false;
 
-  //   for (size_t i = 0; i < obstacles_x_.size(); i++)
-  //   {
-  //     // Find local coordinates of obstacle
-  //     turtlelib::Point2D obstacle_pos_world_{obstacles_x_.at(i), obstacles_y_.at(i)};
-  //     turtlelib::Point2D obstacle_pos_robot_ = T_robot_world_(obstacle_pos_world_);
+    for (size_t i = 0; i < walls_.markers.size() && !colliding; i++)
+    {
+      // Find local coordinates of obstacle
+      turtlelib::Point2D obstacle_pos_world_{walls_.markers.at(i).pose.position.x, walls_.markers.at(i).pose.position.y};
+      // turtlelib::Point2D obstacle_pos_robot_ = T_robot_world_(obstacle_pos_world_);
+      turtlelib::Vector2D turtle2obs_world = obstacle_pos_world_ - turtlelib::Point2D{predicted_turtle_.pose().x, predicted_turtle_.pose().y};
 
-  //     // Detect collision
-  //     if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
-  //     {
-  //       // If colliding, calculate shift of robot frame, in robot frame
-  //       turtlelib::Vector2D robotshift_robot_{
-  //       -((collision_radius_ + obstacles_r_) * cos(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.x),
-  //       -((collision_radius_ + obstacles_r_) * sin(atan2(obstacle_pos_robot_.y, obstacle_pos_robot_.x)) - obstacle_pos_robot_.y)
-  //       };
+      // Determine which kind of wall
+      double x_len = 0;
+      double y_len = 0;
+      if(walls_.markers.at(i).scale.x == wall_length_)
+      {
+        // Horizontal
+        x_len = wall_length_;
+        y_len = wall_breadth_;
+      }
+      else if(walls_.markers.at(i).scale.y == wall_length_)
+      {
+        // Vertical
+        x_len = wall_breadth_;
+        y_len = wall_length_;
+      }
 
-  //       // Calculate transform corresponding to this shift
-  //       turtlelib::Transform2D T_robot_newrobot_{robotshift_robot_};
+      // Detect collision
+      // if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
+      // North Wall
+      if (-(y_len/2.0 + collision_radius_) < turtle2obs_world.y && 
+            turtle2obs_world.y < -y_len/2.0 &&
+            fabs(turtle2obs_world.x) < x_len/2.0)
+      {
+        robotshift_world.x = 0;
+        robotshift_world.y = y_len/2.0 + collision_radius_ + turtle2obs_world.y;
+        colliding = true;
+      }
+      // South Wall
+      else if ((y_len/2.0 + collision_radius_) > turtle2obs_world.y && 
+            turtle2obs_world.y > y_len/2.0 &&
+            fabs(turtle2obs_world.x) < x_len/2.0)
+      {
+        robotshift_world.x = 0;
+        robotshift_world.y = -(y_len/2.0 + collision_radius_) + turtle2obs_world.y;
+        colliding = true;
+      }  
+      // West Wall
+      else if ((x_len/2.0 + collision_radius_) > turtle2obs_world.x && 
+            turtle2obs_world.x > x_len/2.0 &&
+            fabs(turtle2obs_world.y) < y_len/2.0)
+      {
+        robotshift_world.x = -(x_len/2.0 + collision_radius_) + turtle2obs_world.x;
+        robotshift_world.y = 0;
+        colliding = true;
+      }  
+      // East Wall
+      if (-(x_len/2.0 + collision_radius_) < turtle2obs_world.x && 
+            turtle2obs_world.x < -x_len/2.0 &&
+            fabs(turtle2obs_world.y) < y_len/2.0)
+      {
+        robotshift_world.x = x_len/2.0 + collision_radius_ + turtle2obs_world.x;
+        robotshift_world.y = 0;
+        colliding = true;
+      }
+    }
+    if (colliding)
+    {
+      // turtlelib::Transform2D T_world_newrobot_ = {{predicted_turtle_.pose().x + robotshift_robot_.x, predicted_turtle_.pose().y + robotshift_robot_.y}, predicted_turtle_.pose().theta};
 
-  //       // Define this transformation in the world frame
-  //       turtlelib::Transform2D T_world_newrobot_ = T_world_robot_ * T_robot_newrobot_;
+      if(lie_group_collision_)
+      {
+        turtles_.at(turtle_idx).q.x += robotshift_world.x;
+        turtles_.at(turtle_idx).q.y += robotshift_world.y;
+        // turtle_.q.theta = T_world_newrobot_.rotation();
+      }
+        
+      turtles_.at(turtle_idx).phi.left = turtlelib::normalize_angle(turtles_.at(turtle_idx).phi.left + predicted_delta_wheels_.left); // TODO: wheel rotation not working properly
+      turtles_.at(turtle_idx).phi.right = turtlelib::normalize_angle(turtles_.at(turtle_idx).phi.right + predicted_delta_wheels_.right);
 
-  //       if(lie_group_collision_)
-  //       {
-  //         turtle_.q.x = T_world_newrobot_.translation().x;
-  //         turtle_.q.y = T_world_newrobot_.translation().y;
-  //         turtle_.q.theta = T_world_newrobot_.rotation();
-  //       }
-          
-  //       turtle_.phi.left = turtlelib::normalize_angle(turtle_.phi.left + predicted_delta_wheels_.left); // TODO: wheel rotation not working properly
-  //       turtle_.phi.right = turtlelib::normalize_angle(turtle_.phi.right + predicted_delta_wheels_.right);
+      // RCLCPP_DEBUG(this->get_logger(), "turtle: %f B: %f", obstacle_pos_robot_.x, obstacle_pos_robot_.y);
+      return true; // Colliding with one obstacle, therefore, ignore other obstacles
+    }
+    return false; // Not colliding
 
-  //       RCLCPP_DEBUG(this->get_logger(), "turtle: %f B: %f", obstacle_pos_robot_.x, obstacle_pos_robot_.y);
-  //       return true; // Colliding with one obstacle, therefore, ignore other obstacles
-  //     } 
-  //   }
-  //   return false; // Not colliding
-
-  //   throw std::runtime_error("Invalid collision! Check collision simulation!");
-  // }
+    throw std::runtime_error("Invalid collision! Check collision simulation!");
+  }
 
   /// \brief Fake lidar data
   void lidar()
@@ -929,7 +1056,7 @@ private:
         // 1. For randomly placed walls
         for (size_t j = 0; j < walls_.markers.size(); j++) 
         {
-          // Determine which kind of wall
+          // Determine horizontal or vwrtical orientation
           double x_len = 0;
           double y_len = 0;
           if(walls_.markers.at(j).scale.x == wall_length_)

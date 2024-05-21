@@ -190,9 +190,6 @@ private:
                     }
                 }
 
-                // double r = 
-                // double normalized_obstacle_count = 
-
                 // Mark cells as free or obstacle. Obstacles given priority.
                 if (free_count >= free_threshold) {
                     // Mark the current cell in the low-resolution map as an obstacle
