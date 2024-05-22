@@ -928,11 +928,12 @@ private:
     turtlelib::DiffDrive predicted_turtle_ = turtles_.at(turtle_idx);
     predicted_turtle_.driveWheels(predicted_delta_wheels_);   
 
-    turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
-    turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
+    // turtlelib::Transform2D T_world_robot_{{predicted_turtle_.pose().x, predicted_turtle_.pose().y}, predicted_turtle_.pose().theta};
+    // turtlelib::Transform2D T_robot_world_ = T_world_robot_.inv(); 
     turtlelib::Vector2D robotshift_world{};
     bool colliding = false;
 
+    // Check for collisions with randomly placed walls
     for (size_t i = 0; i < walls_.markers.size() && !colliding; i++)
     {
       // Find local coordinates of obstacle
@@ -958,7 +959,7 @@ private:
 
       // Detect collision
       // if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
-      // North Wall
+      // North Face
       if (-(y_len/2.0 + collision_radius_) < turtle2obs_world.y && 
             turtle2obs_world.y < -y_len/2.0 &&
             fabs(turtle2obs_world.x) < x_len/2.0)
@@ -967,7 +968,7 @@ private:
         robotshift_world.y = y_len/2.0 + collision_radius_ + turtle2obs_world.y;
         colliding = true;
       }
-      // South Wall
+      // South Face
       else if ((y_len/2.0 + collision_radius_) > turtle2obs_world.y && 
             turtle2obs_world.y > y_len/2.0 &&
             fabs(turtle2obs_world.x) < x_len/2.0)
@@ -976,7 +977,7 @@ private:
         robotshift_world.y = -(y_len/2.0 + collision_radius_) + turtle2obs_world.y;
         colliding = true;
       }  
-      // West Wall
+      // West Face
       else if ((x_len/2.0 + collision_radius_) > turtle2obs_world.x && 
             turtle2obs_world.x > x_len/2.0 &&
             fabs(turtle2obs_world.y) < y_len/2.0)
@@ -985,7 +986,7 @@ private:
         robotshift_world.y = 0;
         colliding = true;
       }  
-      // East Wall
+      // East Face
       if (-(x_len/2.0 + collision_radius_) < turtle2obs_world.x && 
             turtle2obs_world.x < -x_len/2.0 &&
             fabs(turtle2obs_world.y) < y_len/2.0)
@@ -995,6 +996,57 @@ private:
         colliding = true;
       }
     }
+
+    // Check for collision with arena walls
+    for (size_t i = 0; i < arena_walls_.markers.size() && !colliding; i++)
+    {
+      // Find local coordinates of obstacle
+      turtlelib::Point2D obstacle_pos_world_{arena_walls_.markers.at(i).pose.position.x, arena_walls_.markers.at(i).pose.position.y};
+      // turtlelib::Point2D obstacle_pos_robot_ = T_robot_world_(obstacle_pos_world_);
+      turtlelib::Vector2D turtle2obs_world = obstacle_pos_world_ - turtlelib::Point2D{predicted_turtle_.pose().x, predicted_turtle_.pose().y};
+
+      // East Wall
+      if(i == 0)
+      {
+        if (predicted_turtle_.pose().x + collision_radius_ > arena_x_ / 2.0)
+        {
+          robotshift_world.x = -(wall_breadth_/2.0 + collision_radius_) + turtle2obs_world.x;
+          robotshift_world.y = 0;
+          colliding = true;
+        }
+      }
+      // North Wall
+      else if(i == 1)
+      {
+        if (predicted_turtle_.pose().y + collision_radius_ > arena_y_ / 2.0)
+        {
+          robotshift_world.x = 0;
+          robotshift_world.y = -(wall_breadth_/2.0 + collision_radius_) + turtle2obs_world.y;
+          colliding = true;
+        }
+      }
+      // West Wall
+      else if(i == 2)
+      {
+        if (predicted_turtle_.pose().x - collision_radius_ < -arena_x_ / 2.0)
+        {
+          robotshift_world.x = wall_breadth_/2.0 + collision_radius_ + turtle2obs_world.x;
+          robotshift_world.y = 0;
+          colliding = true;
+        }
+      }
+      // South Wall
+      else if(i == 3)
+      {
+        if (predicted_turtle_.pose().y - collision_radius_ < -arena_y_ / 2.0)
+        {
+          robotshift_world.x = 0;
+          robotshift_world.y = wall_breadth_/2.0 + collision_radius_ + turtle2obs_world.y;
+          colliding = true;
+        }
+      }
+    }
+
     if (colliding)
     {
       // turtlelib::Transform2D T_world_newrobot_ = {{predicted_turtle_.pose().x + robotshift_robot_.x, predicted_turtle_.pose().y + robotshift_robot_.y}, predicted_turtle_.pose().theta};

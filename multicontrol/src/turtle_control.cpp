@@ -137,7 +137,7 @@ public:
         std::placeholders::_1));
     yellow_cmdvel_subscriber_ = create_subscription<geometry_msgs::msg::Twist>(
       "yellow/cmd_vel", 10, std::bind(
-        &turtle_control::red_cmdvel_callback, this,
+        &turtle_control::yellow_cmdvel_callback, this,
         std::placeholders::_1));
     red_cmdvel_subscriber_ = create_subscription<geometry_msgs::msg::Twist>(
       "red/cmd_vel", 10, std::bind(
