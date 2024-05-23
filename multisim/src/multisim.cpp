@@ -47,7 +47,11 @@
 #include "std_srvs/srv/empty.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Transform.h"
+#include <tf2/LinearMath/Vector3.h>
 #include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "multisim/srv/teleport.hpp"
@@ -264,6 +268,9 @@ public:
     
       // Initialize the differential drive kinematic state
       turtles_.push_back(turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0, x0, y0}});
+
+      // Initialize odometry frames
+      odom_tfs_.push_back(geometry_msgs::msg::TransformStamped{});
     }
 
     // Create ~/timestep publisher
@@ -305,6 +312,10 @@ public:
 
     // Initialize the transform broadcaster
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+
+    // Initialize the transform listener and buffer
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     // Create Timer
     timer_ = create_wall_timer(
@@ -352,7 +363,6 @@ private:
   int num_robots_;
   size_t timestep_;
   int rate;
-  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   double dt_ = 0.0; // Multisim Timer in seconds
   
   // Environment
@@ -406,6 +416,7 @@ private:
   double lidar_resolution_;
   double lidar_frequency_;
   std::normal_distribution<> lidar_noise_{0.0, 0.0};
+  std::vector<geometry_msgs::msg::TransformStamped> odom_tfs_;
 
   // Create objects
   rclcpp::TimerBase::SharedPtr timer_;
@@ -424,6 +435,9 @@ private:
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr red_wheelcmd_subscriber_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr green_wheelcmd_subscriber_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr blue_wheelcmd_subscriber_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
 
   /// \brief Reset the simulation
@@ -451,26 +465,50 @@ private:
   void broadcast_all_turtles()
   {
     for(int i = 0; i < num_robots_; i++)
-    // for(int i = 0; i < 3; i++)
     {
-      geometry_msgs::msg::TransformStamped t_;
+      // Initialize Transforms
+      tf2::Transform T_world_odom, T_world_footprint;
+      // tf2::fromMsg(odom_tfs_.at(i), T_world_odom);
+      T_world_odom.setRotation(tf2::Quaternion(
+        odom_tfs_.at(i).transform.rotation.x,
+        odom_tfs_.at(i).transform.rotation.y,
+        odom_tfs_.at(i).transform.rotation.z,
+        odom_tfs_.at(i).transform.rotation.w
+      ));
+      T_world_odom.setOrigin(tf2::Vector3(
+        odom_tfs_.at(i).transform.translation.x,
+        odom_tfs_.at(i).transform.translation.y,
+        odom_tfs_.at(i).transform.translation.z
+      ));
 
-      t_.header.stamp = get_clock()->now();
-      t_.header.frame_id = "multisim/world";
-      t_.child_frame_id = colors_.at(i) + "/base_footprint";
-      t_.transform.translation.x = turtles_.at(i).pose().x;
-      t_.transform.translation.y = turtles_.at(i).pose().y;
-      t_.transform.translation.z = 0.0;     
+      // Set rotation (as a quaternion)
+      tf2::Quaternion rotation;
+      rotation.setRPY(0, 0, turtles_.at(i).pose().theta);  // Roll, Pitch, Yaw in radians
+      T_world_footprint.setRotation(rotation);
 
-      tf2::Quaternion q_;
-      q_.setRPY(0, 0, turtles_.at(i).pose().theta);     
-      t_.transform.rotation.x = q_.x();
-      t_.transform.rotation.y = q_.y();
-      t_.transform.rotation.z = q_.z();
-      t_.transform.rotation.w = q_.w();
+      // Set translation
+      tf2::Vector3 translation(turtles_.at(i).pose().x, turtles_.at(i).pose().y, 0.0);  // x, y, z
+      T_world_footprint.setOrigin(translation);
+
+      // Calculate odom to footprint trasnformation
+      tf2::Transform T_odom_footprint = T_world_odom.inverse() * T_world_footprint;
+
+      geometry_msgs::msg::TransformStamped tf_odom_footprint;
+
+      tf_odom_footprint.header.stamp = get_clock()->now();
+      tf_odom_footprint.header.frame_id = colors_.at(i) + "/odom";
+      tf_odom_footprint.child_frame_id = colors_.at(i) + "/base_footprint";
+      tf_odom_footprint.transform.translation.x = T_odom_footprint.getOrigin().x();
+      tf_odom_footprint.transform.translation.y = T_odom_footprint.getOrigin().y();
+      tf_odom_footprint.transform.translation.z = T_odom_footprint.getOrigin().z();     
+
+      tf_odom_footprint.transform.rotation.x = T_odom_footprint.getRotation().x();
+      tf_odom_footprint.transform.rotation.y = T_odom_footprint.getRotation().y();
+      tf_odom_footprint.transform.rotation.z = T_odom_footprint.getRotation().z();
+      tf_odom_footprint.transform.rotation.w = T_odom_footprint.getRotation().w();
 
       // Send the transformation
-      tf_broadcaster_->sendTransform(t_);
+      tf_broadcaster_->sendTransform(tf_odom_footprint);
     }
 
     if (timestep_ % path_frequency_ == 1) {
@@ -961,7 +999,8 @@ private:
       // if (std::sqrt(std::pow(obstacle_pos_robot_.x, 2) + std::pow(obstacle_pos_robot_.y, 2)) < (collision_radius_ + obstacles_r_)) 
       // North Face
       if (-(y_len/2.0 + collision_radius_) < turtle2obs_world.y && 
-            turtle2obs_world.y < -y_len/2.0 &&
+            // turtle2obs_world.y < -y_len/2.0 &&
+            turtle2obs_world.y < 0.0 &&
             fabs(turtle2obs_world.x) < x_len/2.0)
       {
         robotshift_world.x = 0;
@@ -970,7 +1009,8 @@ private:
       }
       // South Face
       else if ((y_len/2.0 + collision_radius_) > turtle2obs_world.y && 
-            turtle2obs_world.y > y_len/2.0 &&
+            // turtle2obs_world.y > y_len/2.0 &&
+            turtle2obs_world.y > 0.0 &&
             fabs(turtle2obs_world.x) < x_len/2.0)
       {
         robotshift_world.x = 0;
@@ -979,7 +1019,8 @@ private:
       }  
       // West Face
       else if ((x_len/2.0 + collision_radius_) > turtle2obs_world.x && 
-            turtle2obs_world.x > x_len/2.0 &&
+            // turtle2obs_world.x > x_len/2.0 &&
+            turtle2obs_world.x > 0.0 &&
             fabs(turtle2obs_world.y) < y_len/2.0)
       {
         robotshift_world.x = -(x_len/2.0 + collision_radius_) + turtle2obs_world.x;
@@ -988,7 +1029,8 @@ private:
       }  
       // East Face
       if (-(x_len/2.0 + collision_radius_) < turtle2obs_world.x && 
-            turtle2obs_world.x < -x_len/2.0 &&
+            // turtle2obs_world.x < -x_len/2.0 &&
+            turtle2obs_world.x < 0.0 &&
             fabs(turtle2obs_world.y) < y_len/2.0)
       {
         robotshift_world.x = x_len/2.0 + collision_radius_ + turtle2obs_world.x;
@@ -1241,6 +1283,7 @@ private:
   /// \brief Main simulation time loop
   void timer_callback()
   {
+    // ACT
     auto message = std_msgs::msg::UInt64();
     message.data = ++timestep_;
     timestep_publisher_->publish(message);
@@ -1248,6 +1291,26 @@ private:
     arena_walls_publisher_->publish(arena_walls_);
     true_simplified_map_publisher_->publish(true_simplified_map_);
 
+    // SENSE
+    geometry_msgs::msg::TransformStamped transform_stamped;
+    for (int i = 0; i < num_robots_; i++)
+    {
+      try
+      {
+        transform_stamped = tf_buffer_->lookupTransform("multisim/world", colors_.at(i) + "/odom", tf2::TimePointZero);
+        RCLCPP_DEBUG(this->get_logger(), "Received transform: %f, %f, %f",
+                    transform_stamped.transform.translation.x,
+                    transform_stamped.transform.translation.y,
+                    transform_stamped.transform.translation.z);
+        odom_tfs_.at(i) = transform_stamped;
+      }
+      catch (tf2::TransformException & ex)
+      {
+        RCLCPP_ERROR(this->get_logger(), "Could not get transform: %s", ex.what());
+      }
+    }
+
+    // PROCESS
     lidar();
     
     sensor_data_pub();

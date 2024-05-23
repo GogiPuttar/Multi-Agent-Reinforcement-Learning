@@ -15,6 +15,7 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(visualization_msgs REQUIRED)
@@ -42,7 +43,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(multisim src/multisim.cpp)
-ament_target_dependencies(multisim rclcpp std_msgs std_srvs tf2 tf2_ros visualization_msgs nuturtlebot_msgs nav_msgs)
+ament_target_dependencies(multisim rclcpp std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs visualization_msgs nuturtlebot_msgs nav_msgs)
 target_link_libraries(multisim turtlelib::turtlelib "${cpp_typesupport_target}")
 
 install(TARGETS
