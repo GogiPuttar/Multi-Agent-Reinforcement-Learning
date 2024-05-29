@@ -50,17 +50,23 @@ public:
     // Parameter descirption
     auto num_robots_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto frequency_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto sim_speed_multiplier_des = rcl_interfaces::msg::ParameterDescriptor{};
 
     num_robots_des.description = "number of agents";
     frequency_des.description = "Timer callback frequency [Hz]";
+    sim_speed_multiplier_des.description = "Margin by which to speed up simulation compared to real-time";
 
     // Declare default parameters values
     declare_parameter("num_robots", 0, num_robots_des);     // 1,2,3,..
-    declare_parameter("frequency", 100, frequency_des);       // Hz for timer_callback
+    declare_parameter("frequency", 100.0, frequency_des);       // Hz for timer_callback
+    declare_parameter("sim_speed_multiplier", 1.0, sim_speed_multiplier_des);       // Float
 
     // Get params - Read params from yaml file that is passed in the launch file
     num_robots_ = get_parameter("num_robots").get_parameter_value().get<int>();
-    int frequency = get_parameter("frequency").get_parameter_value().get<int>();
+    double frequency = get_parameter("frequency").get_parameter_value().get<double>();
+    double sim_speed_multiplier = get_parameter("sim_speed_multiplier").get_parameter_value().get<double>();
+
+    frequency = frequency * sim_speed_multiplier;
 
     // Publishers
     for (int i = 0; i < num_robots_; i++)
@@ -86,8 +92,10 @@ public:
       std::bind(&circle::stop_callback, this, std::placeholders::_1, std::placeholders::_2));
 
     // Timer
+    std::chrono::duration<double> period(1.0 / frequency);
     timer_ = create_wall_timer(
-      std::chrono::milliseconds(1000 / frequency),
+      std::chrono::duration_cast<std::chrono::nanoseconds>(period),
+      // std::chrono::milliseconds(1000.0 / frequency),
       std::bind(&circle::timer_callback, this));
   }
 

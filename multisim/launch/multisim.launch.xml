@@ -16,6 +16,18 @@
   <arg name="num_robots" default="3" 
    description="Number of robots"/>
 
+  <!-- Argument to set simulation speed -->
+  <arg name="rate" default="20" 
+  description="Default rate for world simulation"/>
+
+  <!-- Argument to set simulation speed -->
+  <arg name="sim_speed_multiplier" default="1.0" 
+  description="Changes sim speed in relation to real time"/>
+
+  <!-- Argument to set simulation speed -->
+  <arg name="cmd_vel_frequency" default="100.0" 
+  description="Frequency of velocity commands"/>
+
   <!-- Declare the RViz node -->
   <!-- Load the config file -->
   <node name="rviz2" pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" if="$(eval '\'$(var use_rviz)\' == \'true\'')"/>
@@ -40,6 +52,9 @@
     <param from="$(find-pkg-share nuturtle_description)/config/$(var diff_config)"/>
     <param name="num_robots" value="$(var num_robots)"/>
     <param name="seed" value="$(var seed)"/>
+    <param name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
+    <param name="rate" value="$(var rate)"/>
+    <param name="cmd_vel_frequency" value="$(var cmd_vel_frequency)"/>
   </node>
 
 </launch>

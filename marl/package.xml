@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>marl</name>
+  <version>0.0.1</version>
+  <description>ROS2 package for Multi-Agent Reinforcement Learning with Turtlebots</description>
+  <maintainer email="aditya.nair0123@gmail.com">Aditya Nair</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <build_depend>rclpy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>std_srvs</build_depend>
+  <build_depend>nav_msgs</build_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>multisim</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>tensorflow</exec_depend> <!-- or <exec_depend>torch</exec_depend> if you use PyTorch -->
+
+  <test_depend>pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

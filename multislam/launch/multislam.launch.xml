@@ -15,6 +15,14 @@
     <!-- Argument to set number of robots -->
     <arg name="num_robots" default="3" 
      description="Number of robots"/>
+
+    <!-- Argument to set simulation speed -->
+    <arg name="sim_speed_multiplier" default="1.0" 
+     description="Changes sim speed in relation to real time"/>
+
+    <!-- Argument to set simulation speed -->
+    <arg name="cmd_vel_frequency" default="100.0" 
+     description="Frequency of velocity commands"/>
   
     <!-- Declare the RViz node -->
     <!-- Load the config file -->
@@ -24,7 +32,9 @@
     <include file="$(find-pkg-share multisim)/launch/multisim.launch.xml">
         <!-- Pass required arguments to the launch file -->
         <arg name="num_robots" value="$(var num_robots)"/>
+        <arg name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
         <arg name="seed" value="$(var seed)"/>
+        <arg name="cmd_vel_frequency" value="$(var cmd_vel_frequency)"/>
         <arg name="use_rviz" value="false"/>
     </include>
 
@@ -32,11 +42,13 @@
     <include file="$(find-pkg-share multislam)/launch/load_many_slam.launch.py">
       <!-- Pass required arguments to the Python launch file -->
       <arg name="iterations" value="$(var num_robots)" />
+      <arg name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
     </include>
 
     <!-- Launch Map Combiner -->
     <node pkg="multislam" exec="map_combiner" name="map_combiner">
       <param name="num_robots" value="$(var num_robots)"/>
+      <param name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
     </node>
 
   </launch>

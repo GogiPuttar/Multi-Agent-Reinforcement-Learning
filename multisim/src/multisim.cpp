@@ -40,6 +40,7 @@
 #include <string>
 #include <random>
 #include <queue>
+#include <thread>  // Include for std::this_thread::sleep_for
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -55,6 +56,7 @@
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "multisim/srv/teleport.hpp"
+#include "multisim/srv/reset.hpp"
 #include "nuturtlebot_msgs/msg/wheel_commands.hpp"
 #include "nuturtlebot_msgs/msg/sensor_data.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -63,6 +65,12 @@
 #include "turtlelib/se2d.hpp"
 #include "turtlelib/diff_drive.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+// #include "slam_toolbox/slam_toolbox_common.hpp"
+// #include "slam_toolbox/slam_mapper.hpp"
+// #include <slam_toolbox/srvs/Reset.h>
+// #include <slam_toolbox/srv/pause.hpp>
+// #include <slam_toolbox/srv/save_map.hpp>
+#include <slam_toolbox/srv/reset.hpp>
 
 using namespace std::chrono_literals;
 
@@ -121,6 +129,8 @@ public:
     // Parameter description
     auto seed_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto num_robots_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto sim_speed_multiplier_des = rcl_interfaces::msg::ParameterDescriptor{};
+    auto cmd_vel_frequency_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto rate_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto arena_x_min_des = rcl_interfaces::msg::ParameterDescriptor{};
     auto arena_x_max_des = rcl_interfaces::msg::ParameterDescriptor{};
@@ -146,6 +156,8 @@ public:
 
     seed_des.description = "random seed value to configure the environment. Integer from [1, max_seed]";
     num_robots_des.description = "number of agents";
+    sim_speed_multiplier_des.description = "Margin by which to speed up simulation, compared to real-time";
+    cmd_vel_frequency_des.description = "Nominal frequency of cmd_vel for speed simulation";
     rate_des.description = "Timer callback frequency [Hz]";
     arena_x_min_des.description = "Minimum length of arena along x [m]";
     arena_x_max_des.description = "Maxmimum length of arena along x [m]";
@@ -172,6 +184,8 @@ public:
     // Declare default parameters values
     declare_parameter("seed", 0, seed_des);     // 1,2,3 ... max_seed_
     declare_parameter("num_robots", 0, num_robots_des);     // 1,2,3,..
+    declare_parameter("sim_speed_multiplier", 1.0, sim_speed_multiplier_des);     
+    declare_parameter("cmd_vel_frequency", 100.0, cmd_vel_frequency_des);     
     declare_parameter("rate", 200, rate_des);     // Hz for timer_callback
     declare_parameter("arena_x_min", 0.0, arena_x_min_des);  // Meters
     declare_parameter("arena_x_max", 0.0, arena_x_max_des);  // Meters
@@ -198,6 +212,8 @@ public:
     // Get params - Read params from yaml file that is passed in the launch file
     seed_ = get_parameter("seed").get_parameter_value().get<int>();
     num_robots_ = get_parameter("num_robots").get_parameter_value().get<int>();
+    sim_speed_multiplier_ = get_parameter("sim_speed_multiplier").get_parameter_value().get<double>();
+    cmd_vel_frequency_ = get_parameter("cmd_vel_frequency").get_parameter_value().get<double>();
     rate = get_parameter("rate").get_parameter_value().get<int>();
     arena_x_min_ = get_parameter("arena_x_min").get_parameter_value().get<double>();
     arena_x_max_ = get_parameter("arena_x_max").get_parameter_value().get<double>();
@@ -234,7 +250,9 @@ public:
     lidar_noise_ = std::normal_distribution<>{0.0, std::sqrt(lidar_variance_)};
 
     // Timer timestep [seconds]
-    dt_ = 1.0 / static_cast<double>(rate);
+    dt_ = 1.0 / (static_cast<double>(rate) * sim_speed_multiplier_);
+    // cmdvel_dt_ = 1.0 / (static_cast<double>(cmd_vel_frequency_) * sim_speed_multiplier_);
+    cmdvel_dt_ = 1.0 / static_cast<double>(cmd_vel_frequency_);
 
     // Initialize Pseudo Random environment
     std::srand((unsigned) seed_);
@@ -259,12 +277,17 @@ public:
     {
       // Select random empty spawn point
       std::pair<int, int> spawn_point = empty_spawn_points_.at(std::rand() % static_cast<int>(empty_spawn_points_.size()));
-      spawn_points_.push_back(spawn_point);
+      double spawn_angle = static_cast<double>(std::rand() % 4) * turtlelib::PI / 2.0;
 
       // Infer pseudo random pose from selection
       x0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.first - 1) - (arena_x_ - 1.0) / 2.0;
       y0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.second - 1) - (arena_y_ - 1.0) / 2.0;
-      theta0 = static_cast<double>(std::rand() % 4) * turtlelib::PI / 2.0;
+      theta0 = spawn_angle;
+
+      spawn_poses_.push_back(turtlelib::Pose2D{ theta0, 
+                                                x0, 
+                                                y0
+                                                });
     
       // Initialize the differential drive kinematic state
       turtles_.push_back(turtlelib::DiffDrive{wheel_radius_, track_width_, turtlelib::wheelAngles{}, turtlelib::Pose2D{theta0, x0, y0}});
@@ -272,6 +295,10 @@ public:
       // Initialize odometry frames
       odom_tfs_.push_back(geometry_msgs::msg::TransformStamped{});
     }
+
+    // Enable use of simulation time
+    // this->declare_parameter("use_sim_time", rclcpp::ParameterValue(true));
+    // this->set_parameter(rclcpp::Parameter("use_sim_time", true));
 
     // Create ~/timestep publisher
     timestep_publisher_ = create_publisher<std_msgs::msg::UInt64>("~/timestep", 10);
@@ -299,10 +326,13 @@ public:
         colors_.at(i) + "/sensor_data", 10));
       current_sensor_data_.push_back(nuturtlebot_msgs::msg::SensorData{});
       prev_sensor_data_.push_back(nuturtlebot_msgs::msg::SensorData{});
+
+      // Create a client to call the shutdown service of the slam_toolbox node
+      slam_reset_clients_.push_back(create_client<slam_toolbox::srv::Reset>("/" + colors_.at(i) + "/slam_toolbox/reset"));
     }
 
     // Create ~/reset service
-    reset_server_ = create_service<std_srvs::srv::Empty>(
+    reset_server_ = create_service<multisim::srv::Reset>(
       "~/reset",
       std::bind(&Multisim::reset_callback, this, std::placeholders::_1, std::placeholders::_2));
     // Create ~/teleport service
@@ -314,19 +344,16 @@ public:
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     // Initialize the transform listener and buffer
-    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     // Create Timer
+    std::chrono::duration<double> period(dt_);
     timer_ = create_wall_timer(
-      std::chrono::milliseconds(1000 / rate),
+      std::chrono::duration_cast<std::chrono::nanoseconds>(period),
+      // std::chrono::milliseconds(1000 / rate),
+      // rclcpp::Duration(static_cast<int>(1.0 / rate), static_cast<int>(1e9 / rate)),
       std::bind(&Multisim::timer_callback, this));
-
-    // // Create red/wheel_cmd
-    // wheel_cmd_subscriber_ = create_subscription<nuturtlebot_msgs::msg::WheelCommands>(
-    //   "red/wheel_cmd", 10, std::bind(
-    //     &Multisim::wheel_cmd_callback, this,
-    //     std::placeholders::_1));
 
     // Create color/wheel_cmd subscriber
     // Literally the least problematic way to do this
@@ -361,9 +388,14 @@ private:
   unsigned int seed_;
   unsigned int max_seed_ = 100;
   int num_robots_;
+  double sim_speed_multiplier_;
+  double cmd_vel_frequency_;
   size_t timestep_;
   int rate;
   double dt_ = 0.0; // Multisim Timer in seconds
+  double cmdvel_dt_ = 0.0; // cmd_vel Timer in seconds
+  int rollover = 0;
+  double mux = 10;
   
   // Environment
   double arena_x_;
@@ -380,7 +412,7 @@ private:
   visualization_msgs::msg::MarkerArray arena_walls_;
   visualization_msgs::msg::MarkerArray walls_;
   std::vector<std::pair<int, int>> empty_spawn_points_;
-  std::vector<std::pair<int, int>> spawn_points_;
+  std::vector<turtlelib::Pose2D> spawn_poses_;
   nav_msgs::msg::OccupancyGrid true_simplified_map_;
 
   // Variables related to diff drive
@@ -392,6 +424,10 @@ private:
   double motor_cmd_per_rad_sec_;
   std::vector<turtlelib::DiffDrive> turtles_;
   std::vector<std::string> colors_ = {"cyan", "magenta", "yellow", "red", "green", "blue", "orange", "brown", "white"};
+  bool resetting_ = false;
+  int reset_countdown_init_ = 99;
+  int reset_countdown_ = reset_countdown_init_;
+  int reset_callbacks_ = 3;
 
   // Variables related to visualization
   geometry_msgs::msg::PoseStamped path_pose_stamped_;
@@ -424,7 +460,7 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr walls_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr arena_walls_publisher_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr true_simplified_map_publisher_;
-  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_server_;
+  rclcpp::Service<multisim::srv::Reset>::SharedPtr reset_server_;
   rclcpp::Service<multisim::srv::Teleport>::SharedPtr teleport_server_;
   std::vector<rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> nav_path_publishers_;
   std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> fake_lidar_publishers_;
@@ -435,20 +471,91 @@ private:
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr red_wheelcmd_subscriber_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr green_wheelcmd_subscriber_;
   rclcpp::Subscription<nuturtlebot_msgs::msg::WheelCommands>::SharedPtr blue_wheelcmd_subscriber_;
+  std::vector<rclcpp::Client<slam_toolbox::srv::Reset>::SharedPtr> slam_reset_clients_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
-
   /// \brief Reset the simulation
   void reset_callback(
-    std_srvs::srv::Empty::Request::SharedPtr,
-    std_srvs::srv::Empty::Response::SharedPtr)
+    multisim::srv::Reset::Request::SharedPtr request,
+    multisim::srv::Reset::Response::SharedPtr)
   {
     timestep_ = 0;
-    turtles_.at(0).q.x = 0.0;
-    turtles_.at(0).q.y = 0.0;
-    turtles_.at(0).q.theta = 0.0;
+    resetting_ = true;
+
+    // Initialize Pseudo Random environment
+    std::srand((unsigned) request->seed);
+
+    // Assuming max and min to be integers for simplicity
+    arena_x_ = static_cast<double>(std::rand() % static_cast<int>(arena_x_max_ - arena_x_min_)) + arena_x_min_;
+    arena_y_ = static_cast<double>(std::rand() % static_cast<int>(arena_y_max_ - arena_y_min_)) + arena_y_min_;
+
+    // Reinitialize true simplified map
+    initialize_map_msg();
+
+    // Create arena
+    create_arena_walls();
+
+    // Create obstacles
+    create_walls();
+
+    double x0, y0, theta0;
+    spawn_poses_.clear();
+    for (int i = 0; i < num_robots_; i++)
+    {
+      // Select random empty spawn point
+      std::pair<int, int> spawn_point = empty_spawn_points_.at(std::rand() % static_cast<int>(empty_spawn_points_.size()));
+      double spawn_angle = static_cast<double>(std::rand() % 4) * turtlelib::PI / 2.0;
+
+      // Infer pseudo random pose from selection
+      x0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.first - 1) - (arena_x_ - 1.0) / 2.0;
+      y0 = min_corridor_width_ * 0.5 * static_cast<double>(spawn_point.second - 1) - (arena_y_ - 1.0) / 2.0;
+      theta0 = spawn_angle;
+
+      spawn_poses_.push_back(turtlelib::Pose2D{ theta0, 
+                                                x0, 
+                                                y0
+                                                });
+
+      turtles_.at(i).q = spawn_poses_.at(i);
+
+      paths_.at(i).poses.clear();
+
+      // odom_tfs_.push_back(geometry_msgs::msg::TransformStamped{});
+    }
+
+    // RCLCPP_INFO(this->get_logger(), "YOOOOOOOOOOOOO %d", slam_reset_clients_.at(0)->wait_for_service(std::chrono::seconds(1)));
+
+    reset_slam_toolbox();
+
+    // std::this_thread::sleep_for(6s);
+  }
+
+  void reset_slam_toolbox()
+  {
+    for (int i = 0; i < num_robots_; i++)
+    {
+      for (int j = 0; j < 3; j++)
+      {
+        // Wait for the service to be available
+        while (!slam_reset_clients_.at(i)->wait_for_service(std::chrono::seconds(1))) {
+          if (!rclcpp::ok()) {
+            RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the %d service. Exiting.", i);
+            return;
+          }
+          RCLCPP_INFO(this->get_logger(), "Waiting for the %d service to appear...", i);
+        }
+
+        auto request = std::make_shared<slam_toolbox::srv::Reset::Request>();
+        request->pause_new_measurements = true;
+        auto future = slam_reset_clients_.at(i)->async_send_request(request);
+      }
+      // Pause to let maps realign properly
+      std::this_thread::sleep_for(1s);
+    }
+
+    true_simplified_map_.header.stamp.sec = 0;
   }
 
   /// \brief Teleport the robot to a specified pose
@@ -519,6 +626,8 @@ private:
   /// \brief Create obstacles as a MarkerArray and publish them to a topic to display them in Rviz
   void create_walls()
   {
+    walls_.markers.clear();
+    empty_spawn_points_.clear();
 
     for (size_t i = 0; i < static_cast<size_t>(wall_num_); i++)
     {
@@ -741,7 +850,9 @@ private:
   /// \brief Create walls as a MarkerArray and publish them to a topic to display them in Rviz
   void create_arena_walls()
   {
-    for (int i = 0; i <= 3; i++) {
+    arena_walls_.markers.clear();
+
+    for (int i = 0; i < 4; i++) {
       visualization_msgs::msg::Marker arena_wall_;
       arena_wall_.header.frame_id = "multisim/world";
       arena_wall_.header.stamp = get_clock()->now();
@@ -814,6 +925,7 @@ private:
 
   void initialize_map_msg()
   {
+    // true_simplified_map_.header.seq = 1;
     true_simplified_map_.header.stamp = get_clock()->now();
     true_simplified_map_.header.frame_id = "multisim/world";
     true_simplified_map_.info.map_load_time = get_clock()->now();
@@ -830,6 +942,8 @@ private:
 
     // Initialize as empty map (0 for free, 100 for occupied, -1 for unknown)
     true_simplified_map_.data.resize(true_simplified_map_.info.width * true_simplified_map_.info.height, -1);
+
+    std::fill(true_simplified_map_.data.begin(), true_simplified_map_.data.end(), -1);
   }
 
   /// \brief wheel_cmd_callback subscriptions
@@ -898,8 +1012,8 @@ private:
     current_sensor_data_.at(turtle_idx).stamp = get_clock()->now();
 
     // Update current sensor data as integer values
-    current_sensor_data_.at(turtle_idx).left_encoder = round((static_cast<double>(noisy_wheel_cmd_.left_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.at(turtle_idx).left_encoder);
-    current_sensor_data_.at(turtle_idx).right_encoder = round((static_cast<double>(noisy_wheel_cmd_.right_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * dt_ + prev_sensor_data_.at(turtle_idx).right_encoder);
+    current_sensor_data_.at(turtle_idx).left_encoder = round((static_cast<double>(noisy_wheel_cmd_.left_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * cmdvel_dt_ + prev_sensor_data_.at(turtle_idx).left_encoder);
+    current_sensor_data_.at(turtle_idx).right_encoder = round((static_cast<double>(noisy_wheel_cmd_.right_velocity) * motor_cmd_per_rad_sec_) * encoder_ticks_per_rad_ * cmdvel_dt_ + prev_sensor_data_.at(turtle_idx).right_encoder);
 
     // Set previous as current    
     prev_sensor_data_.at(turtle_idx) = current_sensor_data_.at(turtle_idx);
@@ -909,7 +1023,7 @@ private:
     double right_slip_ = wheel_slip_(get_random());
 
     // Change in wheel angles with slip
-    turtlelib::wheelAngles delta_wheels_{(static_cast<double>(noisy_wheel_cmd_.left_velocity) * (1 + left_slip_) * motor_cmd_per_rad_sec_) * dt_, (static_cast<double>(noisy_wheel_cmd_.right_velocity) * (1 + right_slip_) * motor_cmd_per_rad_sec_) * dt_};
+    turtlelib::wheelAngles delta_wheels_{(static_cast<double>(noisy_wheel_cmd_.left_velocity) * (1 + left_slip_) * motor_cmd_per_rad_sec_) * cmdvel_dt_, (static_cast<double>(noisy_wheel_cmd_.right_velocity) * (1 + right_slip_) * motor_cmd_per_rad_sec_) * cmdvel_dt_};
 
     // Detect and perform required update to transform if colliding, otherwise update trasnform normally
     if(!detect_and_simulate_collision(delta_wheels_, turtle_idx))
@@ -919,6 +1033,9 @@ private:
       // RCLCPP_ERROR(this->get_logger(), "DRIVING!");
       // RCLCPP_ERROR(this->get_logger(), "Param wheel_radius: %f", wheel_radius_);
     }
+    rollover++;
+    // RCLCPP_ERROR(this->get_logger(), "INCREMENT %d %f", rollover, sim_speed_multiplier_);
+
   }
 
   /// \brief Publish sensor data
@@ -930,6 +1047,9 @@ private:
       {
         sensor_data_publishers_.at(i)->publish(current_sensor_data_.at(i));
       }
+      rollover = 0;
+      // RCLCPP_ERROR(this->get_logger(), "RESET %d", rollover);
+
     }
   }
 
@@ -1311,11 +1431,36 @@ private:
     }
 
     // PROCESS
+    broadcast_all_turtles();
+
+    if (resetting_)
+    {
+      if (reset_countdown_ % (reset_countdown_init_ / reset_callbacks_) == 1)
+      {
+        // RCLCPP_INFO(this->get_logger(), "DEDAGADEEG %i", reset_countdown_);
+        reset_slam_toolbox();
+        std::this_thread::sleep_for(1s);
+
+        if (reset_countdown_ == 1)
+        {
+          resetting_ = false;
+          reset_countdown_ = 100;
+        }
+        else
+        {
+          --reset_countdown_;
+        }
+      }
+      else
+      {
+        --reset_countdown_;
+      }
+      
+    }
+
     lidar();
     
     sensor_data_pub();
-
-    broadcast_all_turtles();
 
     for(int i = 0; i < num_robots_; i++)
     {
@@ -1329,6 +1474,12 @@ private:
       {
         fake_lidar_publishers_.at(i)->publish(lidars_data_.at(i));
       }
+    }
+
+    // Reset reinitialization flag after one time loop
+    if (true_simplified_map_.header.stamp.sec == 0)
+    {
+      true_simplified_map_.header.stamp = get_clock()->now();
     }
   }
 
@@ -1427,7 +1578,15 @@ private:
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<Multisim>());
+
+  // Create the node
+  auto node = std::make_shared<Multisim>();
+
+  // Set the use_sim_time parameter to true
+  // node->declare_parameter("use_sim_time", rclcpp::ParameterValue(true));
+  // node->set_parameter(rclcpp::Parameter("use_sim_time", true));
+
+  rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;
 }

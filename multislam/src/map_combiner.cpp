@@ -84,6 +84,19 @@ private:
 
     void true_simplified_map_callback(const nav_msgs::msg::OccupancyGrid & msg)
     {   
+        // if (proposed_simplified_map_.info.width != msg.info.width ||
+        //     proposed_simplified_map_.info.height != msg.info.height)
+        // {
+        //     initialization_flag = false;
+        // }
+
+        if (proposed_simplified_map_.info.width != msg.info.width ||
+            proposed_simplified_map_.info.height != msg.info.height ||
+            msg.header.stamp.sec == 0)
+        {
+            initialization_flag = false;
+        }
+        
         if (!initialization_flag) // Initialize only if not yet initialized
         {
             proposed_simplified_map_.header.stamp = get_clock()->now();
@@ -102,6 +115,8 @@ private:
 
             // Initialize as empty map (0 for free, 100 for occupied, -1 for unknown)
             proposed_simplified_map_.data.resize(proposed_simplified_map_.info.width * proposed_simplified_map_.info.height, -1);
+
+            std::fill(proposed_simplified_map_.data.begin(), proposed_simplified_map_.data.end(), -1);
 
             // Map is now initialized
             initialization_flag = true;
@@ -189,17 +204,19 @@ private:
                         }
                     }
                 }
-
+                
+                // Mark cell as unexplored by default
+                int current_cell_idx = j * proposed_simplified_map_.info.width + i;
+                // proposed_simplified_map_.data[current_cell_idx] = -1;
+                
                 // Mark cells as free or obstacle. Obstacles given priority.
                 if (free_count >= free_threshold) {
                     // Mark the current cell in the low-resolution map as an obstacle
-                    int current_cell_idx = j * proposed_simplified_map_.info.width + i;
                     proposed_simplified_map_.data[current_cell_idx] = 0;
                 }
                 if (obstacle_count >= obstacle_threshold) {
                 // if (obstacle_count > 0) {
                     // Mark the current cell in the low-resolution map as an obstacle
-                    int current_cell_idx = j * proposed_simplified_map_.info.width + i;
                     proposed_simplified_map_.data[current_cell_idx] = 100;
                     // proposed_simplified_map_.data[current_cell_idx] = obstacle_count * 10;
                 }

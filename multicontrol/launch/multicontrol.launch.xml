@@ -16,6 +16,14 @@
     <arg name="num_robots" default="3" 
      description="Number of robots"/>
 
+    <!-- Argument to set simulation speed -->
+    <arg name="sim_speed_multiplier" default="1.0" 
+     description="Changes sim speed in relation to real time"/>
+
+    <!-- Argument to set simulation speed -->
+    <arg name="cmd_vel_frequency" default="100.0" 
+     description="Frequency of velocity commands"/>
+
     <!-- Argument to specify type of motion -->
     <arg name="cmd_src" default="circle"
     description="What motion to command - circle, policy, or none"/>
@@ -33,7 +41,9 @@
         <!-- Pass required arguments to the launch file -->
         <arg name="num_robots" value="$(var num_robots)"/>
         <arg name="seed" value="$(var seed)"/>
+        <arg name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
         <arg name="use_rviz" value="false"/>
+        <arg name="cmd_vel_frequency" value="$(var cmd_vel_frequency)"/>
     </include>
 
     <!-- Run Robot controller -->
@@ -46,6 +56,8 @@
     <node pkg="multicontrol" exec="circle" name="circle"
     if="$(eval '\'$(var cmd_src)\' == \'circle\'')">
         <param name="num_robots" value="$(var num_robots)"/>
+        <param name="sim_speed_multiplier" value="$(var sim_speed_multiplier)"/>
+        <param name="frequency" value="$(var cmd_vel_frequency)"/>
     </node>
 
   </launch>

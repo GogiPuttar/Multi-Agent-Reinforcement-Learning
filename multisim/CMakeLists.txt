@@ -20,11 +20,13 @@ find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(nuturtlebot_msgs REQUIRED)
+find_package(slam_toolbox REQUIRED)
 find_package(turtlelib REQUIRED)
 find_package(nav_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}_srv
   "srv/Teleport.srv"
+  "srv/Reset.srv"
   LIBRARY_NAME ${PROJECT_NAME}
 )
 
@@ -43,7 +45,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(multisim src/multisim.cpp)
-ament_target_dependencies(multisim rclcpp std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs visualization_msgs nuturtlebot_msgs nav_msgs)
+ament_target_dependencies(multisim rclcpp std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs visualization_msgs nuturtlebot_msgs nav_msgs slam_toolbox)
 target_link_libraries(multisim turtlelib::turtlelib "${cpp_typesupport_target}")
 
 install(TARGETS
