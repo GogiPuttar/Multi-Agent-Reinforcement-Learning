@@ -1,0 +1,2 @@
+int32[6] robots # 0 for no motion, 1 for forward/counterclockwise, and -1 for back/clockwise
+---

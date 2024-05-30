@@ -24,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'train_service = marl_turtlebots.train_service:main',
+            'environment_node = multi_agent_rl.environment:main',
+            'trial_service = multi_agent_rl.run_trials:main',
         ],
     },
 )

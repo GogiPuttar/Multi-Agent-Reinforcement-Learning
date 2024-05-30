@@ -28,6 +28,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 // #include "nuturtle_control/srv/initial_pose.hpp"
 #include "multicontrol/srv/control.hpp"
+#include "multicontrol/srv/action.hpp"
 #include "std_srvs/srv/empty.hpp"
 
 using namespace std::chrono_literals;
@@ -90,6 +91,14 @@ public:
     stop_server_ = create_service<std_srvs::srv::Empty>(
       "stop",
       std::bind(&circle::stop_callback, this, std::placeholders::_1, std::placeholders::_2));
+     // Forward Action server
+    forward_action_server_ = create_service<multicontrol::srv::Action>(
+      "forward",
+      std::bind(&circle::forward_action_callback, this, std::placeholders::_1, std::placeholders::_2));
+     // Turn Action server
+    turn_action_server_ = create_service<multicontrol::srv::Action>(
+      "turn",
+      std::bind(&circle::turn_action_callback, this, std::placeholders::_1, std::placeholders::_2));
 
     // Timer
     std::chrono::duration<double> period(1.0 / frequency);
@@ -106,12 +115,19 @@ private:
   bool twist_changed_ = true; // Keeping track of when twists are updated
   std::vector<geometry_msgs::msg::Twist> body_twists_;
   std::vector<std::string> colors_ = {"cyan", "magenta", "yellow", "red", "green", "blue", "orange", "brown", "white"};
+  double fixed_linear_vel_ = 0.22;
+  // double fixed_angular_vel_ = 0.5;
+  double fixed_angular_vel_ = 1.38;
+  int action_countdown_ = 0;
+  const int action_countdown_init_ = 114;
 
   // Create objects
   std::vector<rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> cmd_vel_publishers_;
   rclcpp::Service<multicontrol::srv::Control>::SharedPtr control_server_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reverse_server_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr stop_server_;
+  rclcpp::Service<multicontrol::srv::Action>::SharedPtr forward_action_server_;
+  rclcpp::Service<multicontrol::srv::Action>::SharedPtr turn_action_server_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   /// \brief control service callback, sets desired twist value
@@ -127,6 +143,37 @@ private:
     twist_changed_ = true;
     stopped_ = false;
     RCLCPP_DEBUG(this->get_logger(), "Circle started. Twist: linear.x:%f, angular.z:%f", body_twists_.at(0).linear.x, body_twists_.at(0).angular.z);
+  }
+
+  /// \brief makes robots move forward or backward for a fixed duration
+  void forward_action_callback(
+    multicontrol::srv::Action::Request::SharedPtr request,
+    multicontrol::srv::Action::Response::SharedPtr)
+  {
+    for (int i = 0; i < num_robots_; i++)
+    {
+      body_twists_.at(i).linear.x = request->robots.at(i) * fixed_linear_vel_;
+      body_twists_.at(i).angular.z = 0.0;
+    }
+    twist_changed_ = true;
+    stopped_ = false;
+    action_countdown_ = action_countdown_init_;
+  }
+
+  /// \brief makes robots turn clockwise or counterclockwise a fixed duration
+  void turn_action_callback(
+    multicontrol::srv::Action::Request::SharedPtr request,
+    multicontrol::srv::Action::Response::SharedPtr)
+  {
+    action_countdown_ = action_countdown_init_;
+    for (int i = 0; i < num_robots_; i++)
+    {
+      body_twists_.at(i).linear.x = 0.0;
+      body_twists_.at(i).angular.z = request->robots.at(i) * fixed_angular_vel_;
+    }
+    twist_changed_ = true;
+    stopped_ = false;
+    action_countdown_ = action_countdown_init_;
   }
 
   /// \brief reverse service callback, inverts twist
@@ -170,8 +217,19 @@ private:
       {  
         for (int i = 0; i < num_robots_; i++)
         {
+          if (action_countdown_ == 0)
+          {
+            body_twists_.at(i).linear.x = 0.0;
+            body_twists_.at(i).angular.z = 0.0;
+          }
           cmd_vel_publishers_.at(i)->publish(body_twists_.at(i));
         }
+
+        if (action_countdown_ != 0)
+        {
+          --action_countdown_;
+        }
+
         twist_changed_ = false;
       }
     }

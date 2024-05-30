@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.node import Node
-from std_srvs.srv import Empty
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Int32MultiArray
+from multisim.srv import Reset
 import numpy as np
 
 class MultiAgentEnv(Node):
@@ -23,7 +23,11 @@ class MultiAgentEnv(Node):
     def reset(self, seed):
         req = Reset.Request()
         req.seed = seed
-        self.reset_service.call_async(req)
+        while not self.reset_service.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting again...')
+        future = self.reset_service.call_async(req)
+        rclpy.spin_until_future_complete(self, future)
+        return future.result()
 
     def proposed_map_callback(self, msg):
         self.proposed_map = np.array(msg.data).reshape((msg.info.height, msg.info.width))
@@ -40,3 +44,10 @@ class MultiAgentEnv(Node):
             'true_map': self.true_map,
             'collisions': self.collisions
         }
+    
+    def calculate_reward(self):
+        if self.proposed_map is None or self.true_map is None:
+            return 0
+        coverage = np.sum(self.proposed_map == self.true_map) / self.proposed_map.size
+        penalty = np.sum(self.collisions)
+        return coverage - penalty

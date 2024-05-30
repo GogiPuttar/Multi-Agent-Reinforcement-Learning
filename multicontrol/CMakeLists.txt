@@ -32,6 +32,7 @@ endif()
 rosidl_generate_interfaces(${PROJECT_NAME}_srv
   # "srv/InitialPose.srv"
   "srv/Control.srv"
+  "srv/Action.srv"
   LIBRARY_NAME ${PROJECT_NAME}
 )
 
